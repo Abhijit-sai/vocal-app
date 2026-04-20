@@ -1,0 +1,209 @@
+@import "tailwindcss";
+
+:root {
+  /* =========================================================
+   * BRAND / PRIMITIVES
+   * Raw colors – do not use these directly in components.
+   * ========================================================= */
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  --red-50:    #fef2f2;
+  --red-100:   #fee2e2;
+  --red-500:   #ef4444;
+  --red-600:   #dc2626;
+  --red-700:   #b91c1c;
+
+  --amber-50:  #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+
+  --green-50:  #f0fdf4;
+  --green-100: #dcfce7;
+  --green-500: #10b981;
+  --green-600: #059669;
+  --green-700: #047857;
+
+  --orange-500: #f97316;
+  --yellow-500: #eab308;
+
+  /* =========================================================
+   * SEMANTIC TOKENS — use these in components.
+   * ========================================================= */
+
+  /* Dark operational shell (sidebar, top-app-chrome) */
+  --shell-bg:          #0b0f19;
+  --shell-surface:     #111828;
+  --shell-surface-hi:  #19233a;
+  --shell-border:      #1f2a3f;
+  --shell-text:        #e2e8f0;
+  --shell-text-dim:    #94a3b8;
+  --shell-muted:       #64748b;
+  --shell-nav-active:  #1e3a5f;
+
+  /* Light work canvas (main content area) */
+  --canvas-bg:         #f6f7fb;
+  --canvas-surface:    #ffffff;
+  --canvas-surface-alt:#f8fafc;
+  --canvas-border:     #e2e8f0;
+  --canvas-border-strong: #cbd5e1;
+  --canvas-text:       #0f172a;
+  --canvas-text-dim:   #475569;
+  --canvas-muted:      #64748b;
+
+  /* Primary action */
+  --primary:           var(--brand-500);
+  --primary-hover:     var(--brand-600);
+  --primary-text:      #ffffff;
+  --primary-soft-bg:   #eff6ff;
+  --primary-soft-text: #1d4ed8;
+
+  /* Stage colors (ticket pipeline) */
+  --stage-to-do-bg:        var(--slate-100);
+  --stage-to-do-text:      var(--slate-700);
+  --stage-to-do-dot:       var(--slate-500);
+  --stage-in-progress-bg:  #dbeafe;
+  --stage-in-progress-text:#1d4ed8;
+  --stage-in-progress-dot: var(--brand-500);
+  --stage-on-hold-bg:      var(--amber-100);
+  --stage-on-hold-text:    var(--amber-700);
+  --stage-on-hold-dot:     var(--amber-500);
+  --stage-closed-bg:       var(--green-100);
+  --stage-closed-text:     var(--green-700);
+  --stage-closed-dot:      var(--green-500);
+
+  /* Severity */
+  --sev-critical-bg:   var(--red-50);
+  --sev-critical-text: var(--red-700);
+  --sev-critical:      var(--red-500);
+  --sev-high-bg:       #ffedd5;
+  --sev-high-text:     #9a3412;
+  --sev-high:          var(--orange-500);
+  --sev-medium-bg:     var(--amber-100);
+  --sev-medium-text:   var(--amber-700);
+  --sev-medium:        var(--amber-500);
+  --sev-low-bg:        var(--slate-100);
+  --sev-low-text:      var(--slate-600);
+  --sev-low:           var(--slate-500);
+
+  /* Status alerts (banners) */
+  --alert-danger-bg:    var(--red-50);
+  --alert-danger-text:  var(--red-700);
+  --alert-danger-border:var(--red-500);
+  --alert-warning-bg:   var(--amber-50);
+  --alert-warning-text: var(--amber-700);
+  --alert-warning-border: var(--amber-500);
+  --alert-info-bg:      #eff6ff;
+  --alert-info-text:    #1d4ed8;
+  --alert-info-border:  var(--brand-500);
+  --alert-success-bg:   var(--green-50);
+  --alert-success-text: var(--green-700);
+  --alert-success-border: var(--green-500);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 10px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius:    6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+/* NOTE: Tailwind v4 preflight already resets margin/padding on common
+   elements and sets box-sizing: border-box on *, *::before, *::after.
+   An unlayered `* { margin: 0; padding: 0 }` here would beat every
+   utility in @layer utilities (e.g. ml-auto, space-y-*) due to
+   cascade-layer precedence — do not add one back. */
+
+html, body, #__next { height: 100%; }
+
+body {
+  background: var(--canvas-bg);
+  color: var(--canvas-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Clean, subtle scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--slate-300); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--slate-400); background-clip: content-box; border: 2px solid transparent; }
+
+/* Dark scrollbars inside shell */
+.shell-scroll::-webkit-scrollbar-thumb { background: var(--slate-700); background-clip: content-box; border: 2px solid transparent; }
+.shell-scroll::-webkit-scrollbar-thumb:hover { background: var(--slate-600); background-clip: content-box; }
+
+/* Focus ring */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Utility classes used across the app */
+.card {
+  background: var(--canvas-surface);
+  border: 1px solid var(--canvas-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.card-hover {
+  transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--canvas-border-strong);
+}
+
+/* Section heading shared style */
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--canvas-muted);
+}
+
+/* Typography helpers */
+.text-muted { color: var(--canvas-muted); }
+.text-dim   { color: var(--canvas-text-dim); }
+
+/* Animation */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: fadeIn 180ms ease-out; }
+
+/* Skeleton shimmer for loading states */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--slate-100) 0%,
+    var(--slate-200) 50%,
+    var(--slate-100) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: var(--radius-sm);
+}

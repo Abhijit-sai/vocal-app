@@ -1,0 +1,456 @@
+/**
+ * Telegram conversation state machine.
+ *
+ * The bot is an INTAKE ASSISTANT only. It guides the citizen through:
+ *   idle → collecting_issue → collecting_media → collecting_location
+ *        → confirming → post_ticket
+ *
+ * Global commands (/start, /help, /cancel, /status) work from any state.
+ *
+ * Guardrails:
+ * - Bot never gives advice, never answers general questions.
+ * - AI is used only for (a) intent classification when idle, (b) enrichment
+ *   after ticket creation. Never for user-facing conversation.
+ * - If the user's message doesn't fit the current step, the bot repeats the
+ *   prompt — it doesn't guess.
+ *
+ * State storage (re-uses existing columns on `channel_conversations`):
+ *   state         'intake' | 'follow_up' | 'completed' | 'abandoned'
+ *   current_step  'idle' | 'collecting_issue' | 'collecting_media'
+ *                 | 'collecting_location' | 'confirming' | 'editing'
+ *                 | 'post_ticket'
+ *   metadata_json { draft: { issue_text, media[], location, intent } }
+ */
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  BOT,
+  sendTelegramMessage,
+  citizenStageLabel,
+  words,
+  extractTicketNumber,
+  isCommand,
+  normalize,
+} from './telegramService'
+import { classifyIntent } from './aiService'
+import { createTicket } from './ticketService'
+import { generateTicketSuggestions } from './aiService'
+
+export type Step =
+  | 'idle'
+  | 'collecting_issue'
+  | 'collecting_media'
+  | 'collecting_location'
+  | 'confirming'
+  | 'editing'
+  | 'post_ticket'
+
+export interface DraftMedia {
+  file_id: string
+  type: 'image' | 'video' | 'document' | 'voice'
+  mime_type?: string | null
+  caption?: string | null
+}
+
+export interface Draft {
+  issue_text?: string | null
+  media?: DraftMedia[]
+  location_text?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  intent?: 'report_issue' | null
+}
+
+export interface IncomingMessage {
+  chat_id: number | string
+  message_id: number
+  text: string | null
+  media?: DraftMedia | null
+  location?: { latitude: number; longitude: number } | null
+}
+
+export interface FlowContext {
+  supabase: SupabaseClient
+  organizationId: string
+  conversationId: string
+  citizenId: string
+  currentStep: Step
+  draft: Draft
+  msg: IncomingMessage
+}
+
+// ============================================================================
+// Public entry point: route one inbound message through the state machine.
+// ============================================================================
+export async function handleInboundMessage(ctx: FlowContext): Promise<void> {
+  const text = ctx.msg.text ?? ''
+
+  // ---- Global commands always win -----------------------------------------
+  if (isCommand(text, '/start'))  return doStart(ctx)
+  if (isCommand(text, '/help'))   return doHelp(ctx)
+  if (isCommand(text, '/cancel')) return doCancel(ctx)
+  if (isCommand(text, '/status')) return doStatusCommand(ctx, text)
+
+  // ---- State dispatch -----------------------------------------------------
+  switch (ctx.currentStep) {
+    case 'idle':                return handleIdle(ctx)
+    case 'collecting_issue':    return handleCollectingIssue(ctx)
+    case 'collecting_media':    return handleCollectingMedia(ctx)
+    case 'collecting_location': return handleCollectingLocation(ctx)
+    case 'confirming':          return handleConfirming(ctx)
+    case 'editing':             return handleEditing(ctx)
+    case 'post_ticket':         return handlePostTicket(ctx)
+    default:                    return handleIdle(ctx)
+  }
+}
+
+// ============================================================================
+// Global handlers
+// ============================================================================
+async function doStart(ctx: FlowContext) {
+  await resetConversation(ctx, 'idle')
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+}
+
+async function doHelp(ctx: FlowContext) {
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.help())
+}
+
+async function doCancel(ctx: FlowContext) {
+  await resetConversation(ctx, 'idle')
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.cancelled())
+}
+
+async function doStatusCommand(ctx: FlowContext, text: string) {
+  const fromText = extractTicketNumber(text)
+  await replyStatus(ctx, fromText)
+}
+
+// ============================================================================
+// State handlers
+// ============================================================================
+async function handleIdle(ctx: FlowContext) {
+  const text = (ctx.msg.text ?? '').trim()
+
+  // Short circuit on obvious words
+  if (words.isReport(text)) return startIntake(ctx)
+  if (words.isStatus(text)) return replyStatus(ctx, extractTicketNumber(text))
+  if (words.isHelp(text))   return sendTelegramMessage(ctx.msg.chat_id, BOT.help())
+
+  // First-time or unclear — if no text at all (pure media), prompt.
+  if (!text && (ctx.msg.media || ctx.msg.location)) {
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+    return
+  }
+
+  if (!text) {
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+    return
+  }
+
+  // Use classifier for ambiguous text.
+  const { intent, ticket_number } = await classifyIntent(text)
+  switch (intent) {
+    case 'greeting':
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+    case 'info_query':
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.help())
+    case 'status_check':
+      return replyStatus(ctx, ticket_number)
+    case 'report_issue':
+      return startIntake(ctx)
+    default:
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.unclear())
+  }
+}
+
+async function startIntake(ctx: FlowContext) {
+  await setStep(ctx, 'collecting_issue', { intent: 'report_issue', media: [] })
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+}
+
+async function handleCollectingIssue(ctx: FlowContext) {
+  // Accept text OR voice (voice counted as a media attachment + ticket text
+  // will be filled from caption/transcript later). Prefer text.
+  const text = (ctx.msg.text ?? '').trim()
+
+  // Media while we're asking for text — accept as evidence + still wait for text
+  if (ctx.msg.media && !text) {
+    const draft = mergeDraft(ctx.draft, { media: [...(ctx.draft.media ?? []), ctx.msg.media] })
+    await setStep(ctx, 'collecting_issue', draft)
+    await sendTelegramMessage(ctx.msg.chat_id,
+      `Got the attachment. Now please *describe the issue* in a message (or voice note). Type /cancel to stop.`)
+    return
+  }
+
+  if (!text) {
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+    return
+  }
+
+  if (text.length < 4) {
+    await sendTelegramMessage(ctx.msg.chat_id,
+      `A bit more detail please — what's happening, and where?`)
+    return
+  }
+
+  const draft = mergeDraft(ctx.draft, { issue_text: text.slice(0, 4000) })
+  await setStep(ctx, 'collecting_media', draft)
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+}
+
+async function handleCollectingMedia(ctx: FlowContext) {
+  const text = (ctx.msg.text ?? '').trim()
+
+  if (ctx.msg.media) {
+    const media = [...(ctx.draft.media ?? []), ctx.msg.media]
+    const draft = mergeDraft(ctx.draft, { media })
+    await setStep(ctx, 'collecting_media', draft)
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.mediaAdded(media.length))
+    return
+  }
+
+  if (words.isDone(text) || words.isSkip(text) || words.isYes(text)) {
+    await setStep(ctx, 'collecting_location', ctx.draft)
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation())
+    return
+  }
+
+  // Any other text while waiting for media — nudge, don't interpret.
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+}
+
+async function handleCollectingLocation(ctx: FlowContext) {
+  const text = (ctx.msg.text ?? '').trim()
+
+  if (ctx.msg.location) {
+    const draft = mergeDraft(ctx.draft, {
+      latitude:  ctx.msg.location.latitude,
+      longitude: ctx.msg.location.longitude,
+      location_text: `${ctx.msg.location.latitude.toFixed(5)}, ${ctx.msg.location.longitude.toFixed(5)}`,
+    })
+    await setStep(ctx, 'confirming', draft)
+    await sendSummary(ctx, draft)
+    return
+  }
+
+  if (text && !words.isSkip(text)) {
+    const draft = mergeDraft(ctx.draft, { location_text: text.slice(0, 500) })
+    await setStep(ctx, 'confirming', draft)
+    await sendSummary(ctx, draft)
+    return
+  }
+
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.locationNeedsText())
+}
+
+async function handleConfirming(ctx: FlowContext) {
+  const text = (ctx.msg.text ?? '').trim()
+
+  if (words.isYes(text)) return fileTicket(ctx)
+  if (words.isEdit(text)) {
+    await setStep(ctx, 'editing', ctx.draft)
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu())
+    return
+  }
+  // Repeat the summary + menu until the user picks.
+  await sendSummary(ctx, ctx.draft)
+}
+
+async function handleEditing(ctx: FlowContext) {
+  const text = normalize(ctx.msg.text ?? '')
+
+  if (text === '1' || text.includes('issue') || text.includes('description')) {
+    await setStep(ctx, 'collecting_issue', { ...ctx.draft, issue_text: null })
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+    return
+  }
+  if (text === '2' || text.includes('attach') || text.includes('media') || text.includes('photo')) {
+    await setStep(ctx, 'collecting_media', { ...ctx.draft, media: [] })
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+    return
+  }
+  if (text === '3' || text.includes('location') || text.includes('address')) {
+    await setStep(ctx, 'collecting_location', {
+      ...ctx.draft,
+      latitude: null, longitude: null, location_text: null,
+    })
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation())
+    return
+  }
+  if (words.isYes(text)) return fileTicket(ctx)
+
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu())
+}
+
+async function handlePostTicket(ctx: FlowContext) {
+  const text = (ctx.msg.text ?? '').trim()
+
+  if (words.isReport(text)) return startIntake(ctx)
+  if (words.isStatus(text)) return replyStatus(ctx, extractTicketNumber(text))
+
+  // Anything else while we're post-ticket — return to idle with a gentle prompt.
+  await setStep(ctx, 'idle', {})
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.postTicketIdle())
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+async function sendSummary(ctx: FlowContext, draft: Draft) {
+  const issue = (draft.issue_text ?? '').trim() || '(no description provided)'
+  const mediaCount = draft.media?.length ?? 0
+  const location = draft.location_text ?? '(not provided)'
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.confirm({ issue, mediaCount, location }))
+}
+
+async function fileTicket(ctx: FlowContext) {
+  const draft = ctx.draft
+  if (!draft.issue_text) {
+    await setStep(ctx, 'collecting_issue', draft)
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+    return
+  }
+
+  const result = await createTicket({
+    organizationId: ctx.organizationId,
+    sourceChannel: 'telegram',
+    sourceConversationId: ctx.conversationId,
+    citizenId: ctx.citizenId,
+    anonymousFlag: false,
+    originalIssueText: draft.issue_text ?? undefined,
+    locationText: draft.location_text ?? undefined,
+    latitude: draft.latitude ?? undefined,
+    longitude: draft.longitude ?? undefined,
+    attachmentCount: draft.media?.length ?? 0,
+  })
+
+  if (!result.success) {
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.failed())
+    return
+  }
+
+  // Link conversation to ticket, transition to follow_up.
+  await ctx.supabase
+    .from('channel_conversations')
+    .update({
+      ticket_id: result.ticketId,
+      state: 'follow_up',
+      current_step: 'post_ticket',
+      metadata_json: { draft: {}, last_ticket_number: result.ticketNumber },
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', ctx.conversationId)
+
+  // Persist media as ticket_attachments (best-effort; don't block reply).
+  // NOTE: storage_path currently holds the Telegram file_id. A follow-up
+  // task will download from Telegram and upload to Supabase storage.
+  if (draft.media?.length) {
+    ctx.supabase.from('ticket_attachments').insert(
+      draft.media.map(m => ({
+        ticket_id: result.ticketId,
+        file_name: m.file_id,
+        storage_path: `telegram:${m.file_id}`,
+        mime_type: m.mime_type ?? null,
+        attachment_type:
+          m.type === 'voice' ? 'audio' :
+          m.type === 'image' ? 'image' :
+          m.type === 'video' ? 'video' :
+          m.type === 'document' ? 'document' : 'other',
+      }))
+    ).then(() => {}, () => {})
+  }
+
+  // Confirm to citizen.
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber))
+
+  // Kick off AI enrichment (fire-and-forget).
+  if (draft.issue_text) {
+    generateTicketSuggestions(draft.issue_text).then(async (s) => {
+      if (s.error) return
+      await ctx.supabase.from('ai_ticket_suggestions').insert({
+        ticket_id: result.ticketId,
+        model_used: process.env.OPENROUTER_MODEL ?? 'unknown',
+        suggested_title: s.suggested_title,
+        suggested_summary: s.suggested_summary,
+        suggested_category: s.suggested_category,
+        suggested_severity: s.suggested_severity,
+        suggested_department: s.suggested_department,
+        suggested_location_text: s.suggested_location_text,
+        confidence_json: s.confidence_json,
+        raw_ai_response: s.raw_ai_response as any,
+        status: 'completed',
+      })
+    }).catch(() => {})
+  }
+}
+
+async function replyStatus(ctx: FlowContext, ticketNumber: string | null) {
+  if (ticketNumber) {
+    const { data: t } = await ctx.supabase
+      .from('tickets')
+      .select('ticket_number, stage, updated_at')
+      .eq('organization_id', ctx.organizationId)
+      .eq('ticket_number', ticketNumber)
+      .maybeSingle()
+    if (!t) {
+      await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNotFound())
+      return
+    }
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.statusReply({
+      ticketNumber: t.ticket_number,
+      stage: citizenStageLabel(t.stage),
+      lastUpdate: new Date(t.updated_at).toLocaleString('en-IN', {
+        dateStyle: 'medium', timeStyle: 'short',
+      }),
+    }))
+    return
+  }
+
+  // No ticket number — use most recent ticket for this citizen.
+  const { data: recent } = await ctx.supabase
+    .from('tickets')
+    .select('ticket_number, stage, updated_at')
+    .eq('organization_id', ctx.organizationId)
+    .eq('citizen_id', ctx.citizenId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!recent) {
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNoRecent())
+    return
+  }
+
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.statusReply({
+    ticketNumber: recent.ticket_number,
+    stage: citizenStageLabel(recent.stage),
+    lastUpdate: new Date(recent.updated_at).toLocaleString('en-IN', {
+      dateStyle: 'medium', timeStyle: 'short',
+    }),
+  }))
+}
+
+// ============================================================================
+// State mutation helpers
+// ============================================================================
+async function setStep(ctx: FlowContext, step: Step, draft: Draft) {
+  await ctx.supabase
+    .from('channel_conversations')
+    .update({
+      current_step: step,
+      metadata_json: { draft },
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', ctx.conversationId)
+  ctx.currentStep = step
+  ctx.draft = draft
+}
+
+async function resetConversation(ctx: FlowContext, step: Step) {
+  await setStep(ctx, step, {})
+}
+
+function mergeDraft(current: Draft, patch: Partial<Draft>): Draft {
+  return { ...current, ...patch }
+}
