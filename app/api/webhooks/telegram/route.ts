@@ -16,6 +16,7 @@ import { NextRequest } from 'next/server'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { upsertCitizenFromTelegram, getOrCreateConversation } from '@/services/citizenService'
 import { handleInboundMessage, type IncomingMessage, type Step, type Draft } from '@/services/telegramFlow'
+import { answerCallbackQuery, clearInlineKeyboard, callbackToSyntheticText } from '@/services/telegramService'
 
 const ORG_ID = process.env.ORG_ID!
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET!
@@ -40,10 +41,23 @@ type TelegramMessage = {
   caption?:  string
 }
 
+type TelegramCallbackQuery = {
+  id: string
+  from: {
+    id: number
+    username?: string
+    first_name?: string
+    last_name?: string
+  }
+  message?: TelegramMessage
+  data?: string
+}
+
 type TelegramUpdate = {
   update_id: number
   message?: TelegramMessage
   edited_message?: TelegramMessage
+  callback_query?: TelegramCallbackQuery
 }
 
 function detectMessageType(msg: TelegramMessage): 'text' | 'voice' | 'image' | 'video' | 'document' | 'location' {
@@ -86,7 +100,36 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const msg = update.message ?? update.edited_message
+  // -------------------------------------------------------------------------
+  // Callback query branch (inline keyboard taps). We translate the callback
+  // back to its equivalent text command and synthesise a TelegramMessage so
+  // the rest of the pipeline is unchanged.
+  // -------------------------------------------------------------------------
+  let msg: TelegramMessage | undefined = update.message ?? update.edited_message
+  let callbackMessageIdOverride: string | null = null
+
+  if (!msg && update.callback_query) {
+    const cb = update.callback_query
+    const syntheticText = cb.data ? callbackToSyntheticText(cb.data) : null
+    // Always ack so the spinner stops even if we don't recognise the data.
+    void answerCallbackQuery(cb.id)
+    // Strip the keyboard off the originating message so it can't be tapped twice.
+    if (cb.message) void clearInlineKeyboard(cb.message.chat.id, cb.message.message_id)
+    if (!syntheticText || !cb.message || !cb.from) {
+      return Response.json({ ok: true })
+    }
+    msg = {
+      message_id: cb.message.message_id,
+      from: cb.from,
+      chat: cb.message.chat,
+      date: cb.message.date,
+      text: syntheticText,
+    }
+    // Distinguish callback-tap audit rows from regular inbound messages
+    // (and keep each tap's row unique).
+    callbackMessageIdOverride = `cb:${cb.id}`
+  }
+
   if (!msg || !msg.from) {
     return Response.json({ ok: true })
   }
@@ -123,7 +166,7 @@ export async function POST(req: NextRequest) {
       conversation_id: conversationId,
       organization_id: ORG_ID,
       channel: 'telegram',
-      channel_message_id: String(msg.message_id),
+      channel_message_id: callbackMessageIdOverride ?? String(msg.message_id),
       direction: 'inbound',
       message_type: messageType,
       raw_text: rawText,

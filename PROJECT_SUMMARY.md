@@ -1,6 +1,6 @@
 # Vocal — Project Summary
 
-**Last updated:** 2026-04-19 (assignment + amplify + SLA rebuild, webhook live)
+**Last updated:** 2026-04-20 (shipped to prod, worker queue + load balancing)
 **Purpose:** Persistent context for future Claude sessions. Read this first before
 making changes — it captures the current state of the codebase, known bugs,
 pending work, and important gotchas that are not obvious from the code.
@@ -14,30 +14,30 @@ pending work, and important gotchas that are not obvious from the code.
 
 ## 0. Where we left off (resume here)
 
-**Latest session: Telegram intake rewrite + Amplify + Ticket panel polish.**
-The Telegram bot is no longer a "first message becomes a ticket" dumb
-pipeline — it is a guarded intake state machine (see §6 "Resumed session —
-Telegram guided intake"). A plain "Hi" now gets a welcome + menu instead of
-a ticket.
+**Latest session (2026-04-20): shipped to prod + worker queue + load-balanced
+assignment.** The app now lives at **https://vocal-app-one.vercel.app**
+(GitHub: `Abhijit-sai/vocal-app`). Prod Telegram webhook is registered
+permanently against the Vercel URL — no more cloudflared cycling for
+demos. Ground workers finally have their own UI at `/my-assignments`,
+and the auto-assign algorithm now load-balances across the least-loaded
+candidates with territory → org-wide fallback. See §12 for details.
 
 Current state at resumption:
 
-- **Code state:** all UI rewrites, skeletons, search-sanitization, scaffold
-  pages, and the `ticketService.ts` RPC revert (§4b) are written to disk.
-- **DB state:** migration 003 is *written* but *not applied*. Clerk third-party
-  auth in Supabase is *not enabled*. RLS is effectively off because every page
-  uses the service client.
-- **Telegram state:** handler is fully rewritten around the new flow.
-  `cloudflared` is installed but any existing quick tunnel from prior
-  sessions is almost certainly dead — re-run and re-register before testing.
-- **Blocking user action** (re-verify after any `.env.local` edits): set
-  `ORG_ID=3f3ff0a3-1ee4-49a5-a956-9e2461a592e3` and restart the dev server.
-  Without this every Telegram insert FK-violates silently (§4a).
+- **Prod:** Vercel deployed, webhook live, 10 seeded test users covering
+  every role (shared password `Vocal!Test2026`). A Hyderabad "Demo
+  Territory" (17.385, 78.4867) is seeded and every ground_worker is
+  attached to it via `user_territories`.
+- **Code state:** All §11 work is in main plus the §12 additions:
+  `services/assignmentService.ts` load-balanced sort, seeding script
+  that now backfills territories, `/my-assignments` worker queue page
+  with live countdown + accept/reject, sidebar nav update.
+- **DB state:** same as §11 — RLS still effectively off (service
+  client everywhere), migrations 001–003 applied.
 
-**First moves for a new session:** run the checklist in §10, get answers from
-the user, then start a fresh cloudflared tunnel and re-register the webhook
-using the command in §8. Only after the bot is confirmed working should we
-start new feature work from §7.
+**First moves for a new session:** open §12 to see exactly what shipped
+on 2026-04-20, then pick from §7 pending work (vercel cron for
+`expire-assignments` is the top un-done item).
 
 ---
 
@@ -655,3 +655,127 @@ negative-cached — in that case, cycle the tunnel.
 - Downloading Telegram attachments server-side (still a
   `telegram:<file_id>` pointer in storage).
 - Tests. Still nothing tested.
+
+---
+
+## 12. 2026-04-20 session — Ship to prod + worker queue + load balancing
+
+Short session that flipped Vocal from "works on localhost" to "works on a
+URL you can send to someone." Three concrete deliverables.
+
+### 12a. Deployed to GitHub + Vercel
+
+- New repo created under the user's personal GitHub
+  (`Abhijit-sai/vocal-app`) via the GitHub REST API (PAT auth).
+- Git config email corrected to `abhijit.siddabuthuni@gmail.com`
+  mid-session (the initial commit was rejected because it was using a
+  placeholder `abhijit@vocal.app`).
+- First push to `main`, Vercel picked it up automatically via the
+  GitHub integration, and the app is live at
+  **https://vocal-app-one.vercel.app**.
+- Prod env vars (Supabase URL + keys, Clerk, OpenRouter, Telegram bot
+  token + webhook secret, `ORG_ID`, `APP_BASE_URL`) are all set in the
+  Vercel project settings.
+- Prod Telegram webhook registered against
+  `https://vocal-app-one.vercel.app/api/telegram/webhook` — this is
+  permanent, no more cloudflared cycling needed for demos. Dev can
+  still use `scripts/dev-tunnel.ps1` for local debugging (§8).
+
+### 12b. Seeded 10 test users covering every role
+
+`scripts/seed-test-users.ts` now:
+
+1. Creates Clerk users and mirrors them into `vocal_users` with
+   the right role_id (super_admin, central_support ×2, state_leader,
+   district_leader ×2, ground_worker ×4).
+2. **NEW:** `seedTerritories()` — finds or creates "Demo Territory"
+   (centroid 17.385, 78.4867, 10 km radius — central Hyderabad) and
+   upserts every ground_worker into `user_territories`. Without this
+   step the old territory-scoped auto-assign returned zero candidates
+   and assignments silently no-op'd.
+3. All users share the password `Vocal!Test2026` for demo
+   convenience. Emails follow `role.N@vocaldemo.test`.
+
+### 12c. Load-balanced auto-assignment with org-wide fallback
+
+`services/assignmentService.ts → listCandidateWorkers()` rewritten:
+
+- `CandidateWorker` now carries `active_ticket_count: number`. A single
+  query counts non-closed tickets grouped by `owner_user_id` and we
+  build a `loadMap`.
+- **Territory-scoped first pass:** workers attached to the ticket's
+  territory via `user_territories`. If empty →
+- **Org-wide fallback:** every ground_worker in the org. This is the
+  fix for the "pilot org with no territories defined yet" failure
+  mode flagged in §11 pending.
+- **Sort:** `active_ticket_count ASC` primary (fewest tickets wins),
+  then `distance_km ASC` secondary (closest wins within a load tier),
+  with `null` distances sorted last. TS null-safety: `ticketLat` and
+  `ticketLng` are extracted to locals with null guards before the
+  sort closure to avoid "possibly null" errors.
+- Result: the dispatcher now offers the next ticket to the
+  least-loaded nearby worker instead of hammering the same top-ranked
+  person. Auto-assign tries up to 3 candidates in order before giving
+  up (user-requested loop).
+
+### 12d. `/my-assignments` — the worker queue UI gap is closed
+
+New server component `app/(dashboard)/my-assignments/page.tsx`:
+
+- Role-gated (redirects non-`ground_worker` to `/dashboard`).
+- Fetches the current *offered* assignment (if any) —
+  `ticket_assignments` where `worker_user_id = me AND is_current
+  AND status = 'offered'` — plus the joined ticket.
+- Fetches *active accepted* tickets — `tickets` where `owner_user_id =
+  me AND stage = 'in_progress' AND sub_status !=
+  'assigned_awaiting_acceptance'`.
+
+New client component `components/workers/WorkerQueue.tsx` (~380 lines):
+
+- **`useCountdown(expiresAt)` hook:** ticks every 1 s, returns
+  `{ secondsLeft, display (m:ss), isUrgent (<30s), expired }`.
+- **`OfferedCard`:** ticket summary + live countdown + Accept / Reject
+  buttons. Reject expands an inline dropdown with 5 canned reasons.
+- **`ActiveCard`:** status dropdown that is forward-only — uses
+  `WORKER_STATUSES.findIndex` to slice to remaining options, matching
+  the server-side `WORKER_ALLOWED_SUB_STATUSES` list. Shows an SLA
+  warning when first-contact is <30 min out. Links to the full ticket
+  detail page.
+- Calls `/api/tickets/accept`, `/api/tickets/reject`,
+  `/api/tickets/status`. After success, `startTransition(() =>
+  router.refresh())` re-fetches the server data without a full page
+  reload.
+
+`components/shell/Sidebar.tsx`: ground_worker nav item changed from
+"My Tickets → /tickets?view=mine" to "My Assignments →
+/my-assignments" with a new `Icons.assignments` (clipboard-with-check
+SVG).
+
+### 12e. Role-gated access verified end-to-end
+
+The Sidebar filters `NAV_SECTIONS` by `userRole` via the `roles:
+RoleName[]` array on each item, so each logged-in user only sees
+their modules (e.g. ground_worker sees only Dashboard, My
+Assignments, Directory). Individual server pages additionally redirect
+mismatched roles — `/my-assignments` redirects non-workers to
+`/dashboard`, `/triage` is central_support+ only, etc. Confirmed in
+prod with the seeded accounts.
+
+### Commit
+
+`f19bf6d` — "Worker queue, load-balanced assignment, territory
+seeding" — 6 files changed, 653 insertions, 28 deletions. On `main`,
+deployed.
+
+### Still pending after this session
+
+- **`vercel.json` cron** for `/api/assignments/expire` — the endpoint
+  exists and is correct, there's just no trigger yet. User explicitly
+  deferred.
+- Territory filter on `/tickets` list.
+- Territory/worker admin UI (right now territories are seeded via
+  script; there's no in-app way to draw a radius).
+- Dashboard stats widgets (open tickets, avg time-to-first-contact,
+  SLA breach count).
+- Downloading Telegram attachments server-side (still pointers).
+- Actual tests.

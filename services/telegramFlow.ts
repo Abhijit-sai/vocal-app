@@ -25,6 +25,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   BOT,
+  KB,
   sendTelegramMessage,
   citizenStageLabel,
   words,
@@ -109,16 +110,16 @@ export async function handleInboundMessage(ctx: FlowContext): Promise<void> {
 // ============================================================================
 async function doStart(ctx: FlowContext) {
   await resetConversation(ctx, 'idle')
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome(), { reply_markup: KB.mainMenu() })
 }
 
 async function doHelp(ctx: FlowContext) {
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.help())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.help(), { reply_markup: KB.mainMenu() })
 }
 
 async function doCancel(ctx: FlowContext) {
   await resetConversation(ctx, 'idle')
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.cancelled())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.cancelled(), { reply_markup: KB.mainMenu() })
 }
 
 async function doStatusCommand(ctx: FlowContext, text: string) {
@@ -139,12 +140,12 @@ async function handleIdle(ctx: FlowContext) {
 
   // First-time or unclear — if no text at all (pure media), prompt.
   if (!text && (ctx.msg.media || ctx.msg.location)) {
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome(), { reply_markup: KB.mainMenu() })
     return
   }
 
   if (!text) {
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.welcome(), { reply_markup: KB.mainMenu() })
     return
   }
 
@@ -152,21 +153,21 @@ async function handleIdle(ctx: FlowContext) {
   const { intent, ticket_number } = await classifyIntent(text)
   switch (intent) {
     case 'greeting':
-      return sendTelegramMessage(ctx.msg.chat_id, BOT.welcome())
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.welcome(), { reply_markup: KB.mainMenu() })
     case 'info_query':
-      return sendTelegramMessage(ctx.msg.chat_id, BOT.help())
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.help(), { reply_markup: KB.mainMenu() })
     case 'status_check':
       return replyStatus(ctx, ticket_number)
     case 'report_issue':
       return startIntake(ctx)
     default:
-      return sendTelegramMessage(ctx.msg.chat_id, BOT.unclear())
+      return sendTelegramMessage(ctx.msg.chat_id, BOT.unclear(), { reply_markup: KB.mainMenu() })
   }
 }
 
 async function startIntake(ctx: FlowContext) {
   await setStep(ctx, 'collecting_issue', { intent: 'report_issue', media: [] })
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue(), { reply_markup: KB.collectingIssue() })
 }
 
 async function handleCollectingIssue(ctx: FlowContext) {
@@ -179,24 +180,26 @@ async function handleCollectingIssue(ctx: FlowContext) {
     const draft = mergeDraft(ctx.draft, { media: [...(ctx.draft.media ?? []), ctx.msg.media] })
     await setStep(ctx, 'collecting_issue', draft)
     await sendTelegramMessage(ctx.msg.chat_id,
-      `Got the attachment. Now please *describe the issue* in a message (or voice note). Type /cancel to stop.`)
+      `Got the attachment. Now please *describe the issue* in a message (or voice note). Type /cancel to stop.`,
+      { reply_markup: KB.collectingIssue() })
     return
   }
 
   if (!text) {
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue(), { reply_markup: KB.collectingIssue() })
     return
   }
 
   if (text.length < 4) {
     await sendTelegramMessage(ctx.msg.chat_id,
-      `A bit more detail please — what's happening, and where?`)
+      `A bit more detail please — what's happening, and where?`,
+      { reply_markup: KB.collectingIssue() })
     return
   }
 
   const draft = mergeDraft(ctx.draft, { issue_text: text.slice(0, 4000) })
   await setStep(ctx, 'collecting_media', draft)
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia(), { reply_markup: KB.askMedia() })
 }
 
 async function handleCollectingMedia(ctx: FlowContext) {
@@ -206,18 +209,18 @@ async function handleCollectingMedia(ctx: FlowContext) {
     const media = [...(ctx.draft.media ?? []), ctx.msg.media]
     const draft = mergeDraft(ctx.draft, { media })
     await setStep(ctx, 'collecting_media', draft)
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.mediaAdded(media.length))
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.mediaAdded(media.length), { reply_markup: KB.mediaAdded() })
     return
   }
 
   if (words.isDone(text) || words.isSkip(text) || words.isYes(text)) {
     await setStep(ctx, 'collecting_location', ctx.draft)
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation(), { reply_markup: KB.askLocation() })
     return
   }
 
   // Any other text while waiting for media — nudge, don't interpret.
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia(), { reply_markup: KB.askMedia() })
 }
 
 async function handleCollectingLocation(ctx: FlowContext) {
@@ -241,7 +244,7 @@ async function handleCollectingLocation(ctx: FlowContext) {
     return
   }
 
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.locationNeedsText())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.locationNeedsText(), { reply_markup: KB.askLocation() })
 }
 
 async function handleConfirming(ctx: FlowContext) {
@@ -250,7 +253,7 @@ async function handleConfirming(ctx: FlowContext) {
   if (words.isYes(text)) return fileTicket(ctx)
   if (words.isEdit(text)) {
     await setStep(ctx, 'editing', ctx.draft)
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu(), { reply_markup: KB.editMenu() })
     return
   }
   // Repeat the summary + menu until the user picks.
@@ -262,12 +265,12 @@ async function handleEditing(ctx: FlowContext) {
 
   if (text === '1' || text.includes('issue') || text.includes('description')) {
     await setStep(ctx, 'collecting_issue', { ...ctx.draft, issue_text: null })
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.startIssue(), { reply_markup: KB.collectingIssue() })
     return
   }
   if (text === '2' || text.includes('attach') || text.includes('media') || text.includes('photo')) {
     await setStep(ctx, 'collecting_media', { ...ctx.draft, media: [] })
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askMedia(), { reply_markup: KB.askMedia() })
     return
   }
   if (text === '3' || text.includes('location') || text.includes('address')) {
@@ -275,12 +278,12 @@ async function handleEditing(ctx: FlowContext) {
       ...ctx.draft,
       latitude: null, longitude: null, location_text: null,
     })
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.askLocation(), { reply_markup: KB.askLocation() })
     return
   }
   if (words.isYes(text)) return fileTicket(ctx)
 
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.editMenu(), { reply_markup: KB.editMenu() })
 }
 
 async function handlePostTicket(ctx: FlowContext) {
@@ -291,7 +294,7 @@ async function handlePostTicket(ctx: FlowContext) {
 
   // Anything else while we're post-ticket — return to idle with a gentle prompt.
   await setStep(ctx, 'idle', {})
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.postTicketIdle())
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.postTicketIdle(), { reply_markup: KB.postTicket() })
 }
 
 // ============================================================================
@@ -301,7 +304,11 @@ async function sendSummary(ctx: FlowContext, draft: Draft) {
   const issue = (draft.issue_text ?? '').trim() || '(no description provided)'
   const mediaCount = draft.media?.length ?? 0
   const location = draft.location_text ?? '(not provided)'
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.confirm({ issue, mediaCount, location }))
+  await sendTelegramMessage(
+    ctx.msg.chat_id,
+    BOT.confirm({ issue, mediaCount, location }),
+    { reply_markup: KB.confirm() },
+  )
 }
 
 async function fileTicket(ctx: FlowContext) {
@@ -326,7 +333,7 @@ async function fileTicket(ctx: FlowContext) {
   })
 
   if (!result.success) {
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.failed())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.failed(), { reply_markup: KB.confirm() })
     return
   }
 
@@ -362,7 +369,7 @@ async function fileTicket(ctx: FlowContext) {
   }
 
   // Confirm to citizen.
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber))
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber), { reply_markup: KB.postTicket() })
 
   // Kick off AI enrichment (fire-and-forget).
   if (draft.issue_text) {
@@ -394,7 +401,7 @@ async function replyStatus(ctx: FlowContext, ticketNumber: string | null) {
       .eq('ticket_number', ticketNumber)
       .maybeSingle()
     if (!t) {
-      await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNotFound())
+      await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNotFound(), { reply_markup: KB.postTicket() })
       return
     }
     await sendTelegramMessage(ctx.msg.chat_id, BOT.statusReply({
@@ -403,7 +410,7 @@ async function replyStatus(ctx: FlowContext, ticketNumber: string | null) {
       lastUpdate: new Date(t.updated_at).toLocaleString('en-IN', {
         dateStyle: 'medium', timeStyle: 'short',
       }),
-    }))
+    }), { reply_markup: KB.postTicket() })
     return
   }
 
@@ -418,7 +425,7 @@ async function replyStatus(ctx: FlowContext, ticketNumber: string | null) {
     .maybeSingle()
 
   if (!recent) {
-    await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNoRecent())
+    await sendTelegramMessage(ctx.msg.chat_id, BOT.statusNoRecent(), { reply_markup: KB.mainMenu() })
     return
   }
 
@@ -428,7 +435,7 @@ async function replyStatus(ctx: FlowContext, ticketNumber: string | null) {
     lastUpdate: new Date(recent.updated_at).toLocaleString('en-IN', {
       dateStyle: 'medium', timeStyle: 'short',
     }),
-  }))
+  }), { reply_markup: KB.postTicket() })
 }
 
 // ============================================================================

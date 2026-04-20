@@ -13,10 +13,21 @@
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? ''
 
+// ----------------------------------------------------------------------------
+// Inline-keyboard types (Telegram Bot API shape).
+// ----------------------------------------------------------------------------
+export interface InlineKeyboardButton {
+  text: string
+  callback_data: string
+}
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][]
+}
+
 export async function sendTelegramMessage(
   chatId: number | string,
   text: string,
-  opts: { markdown?: boolean } = {},
+  opts: { markdown?: boolean; reply_markup?: InlineKeyboardMarkup } = {},
 ): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) return
   try {
@@ -28,10 +39,51 @@ export async function sendTelegramMessage(
         text,
         parse_mode: opts.markdown === false ? undefined : 'Markdown',
         disable_web_page_preview: true,
+        reply_markup: opts.reply_markup,
       }),
     })
   } catch {
     // Never throw from send — webhook must always return 200.
+  }
+}
+
+/**
+ * Acknowledge a callback_query so Telegram stops the loading spinner on the
+ * button. Best-effort; never throws.
+ */
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) return
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    })
+  } catch {
+    // swallow
+  }
+}
+
+/**
+ * Strip the inline keyboard off a previously-sent message so the user can't
+ * tap it again once they've made their choice. Best-effort; never throws.
+ */
+export async function clearInlineKeyboard(
+  chatId: number | string,
+  messageId: number,
+): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) return
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    })
+  } catch {
+    // swallow
   }
 }
 
@@ -142,6 +194,118 @@ Last update: ${args.lastUpdate}${args.latestNote ? `\n\nLatest note:\n${args.lat
   postTicketIdle: () =>
 `Type *report* to file another issue, or *status* to check an existing one.`,
 } as const
+
+// ============================================================================
+// Inline keyboards for each prompt.
+//
+// Callback-data scheme: "<group>:<value>" — kept short (Telegram cap is 64 B).
+// The webhook route translates these back to synthetic text commands so the
+// existing state machine in telegramFlow.ts works unchanged. Text-command
+// fallback ("report", "done", "confirm", "1"/"2"/"3", …) still works for
+// users on clients that can't render inline keyboards.
+// ============================================================================
+export const CB = {
+  // main menu
+  MENU_REPORT: 'menu:report',
+  MENU_STATUS: 'menu:status',
+  MENU_HELP:   'menu:help',
+  // intake: media step
+  MEDIA_DONE:  'media:done',
+  MEDIA_SKIP:  'media:skip',
+  // intake: confirm step
+  CONFIRM_YES:    'confirm:yes',
+  CONFIRM_EDIT:   'confirm:edit',
+  CONFIRM_CANCEL: 'confirm:cancel',
+  // intake: edit menu
+  EDIT_ISSUE:    'edit:issue',
+  EDIT_MEDIA:    'edit:media',
+  EDIT_LOCATION: 'edit:location',
+  EDIT_CONFIRM:  'edit:confirm',
+  // global
+  CANCEL: 'global:cancel',
+} as const
+
+export const KB = {
+  mainMenu: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '📝 Report an issue', callback_data: CB.MENU_REPORT }],
+      [{ text: '📋 Check ticket status', callback_data: CB.MENU_STATUS }],
+      [{ text: 'ℹ️ Help', callback_data: CB.MENU_HELP }],
+    ],
+  }),
+  collectingIssue: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '✖️ Cancel', callback_data: CB.CANCEL }],
+    ],
+  }),
+  askMedia: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [
+        { text: '✅ Done',      callback_data: CB.MEDIA_DONE },
+        { text: '⏭ Skip media', callback_data: CB.MEDIA_SKIP },
+      ],
+      [{ text: '✖️ Cancel', callback_data: CB.CANCEL }],
+    ],
+  }),
+  mediaAdded: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [
+        { text: '✅ Done',  callback_data: CB.MEDIA_DONE },
+        { text: '⏭ Skip',   callback_data: CB.MEDIA_SKIP },
+      ],
+    ],
+  }),
+  askLocation: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '✖️ Cancel', callback_data: CB.CANCEL }],
+    ],
+  }),
+  confirm: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '✅ Confirm & file',   callback_data: CB.CONFIRM_YES }],
+      [{ text: '✏️ Edit something',  callback_data: CB.CONFIRM_EDIT }],
+      [{ text: '✖️ Cancel',           callback_data: CB.CONFIRM_CANCEL }],
+    ],
+  }),
+  editMenu: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '📝 Issue description', callback_data: CB.EDIT_ISSUE }],
+      [{ text: '📎 Attachments',       callback_data: CB.EDIT_MEDIA }],
+      [{ text: '📍 Location',          callback_data: CB.EDIT_LOCATION }],
+      [{ text: '✅ File as-is',         callback_data: CB.EDIT_CONFIRM }],
+    ],
+  }),
+  postTicket: (): InlineKeyboardMarkup => ({
+    inline_keyboard: [
+      [{ text: '📝 Report another', callback_data: CB.MENU_REPORT }],
+      [{ text: '📋 Check status',   callback_data: CB.MENU_STATUS }],
+    ],
+  }),
+} as const
+
+/**
+ * Translate an inline-keyboard callback_data value back to the synthetic
+ * text command the state machine already understands. Returning `null`
+ * means "unknown — ignore."
+ */
+export function callbackToSyntheticText(data: string): string | null {
+  switch (data) {
+    case CB.MENU_REPORT:     return 'report'
+    case CB.MENU_STATUS:     return 'status'
+    case CB.MENU_HELP:       return 'help'
+    case CB.MEDIA_DONE:      return 'done'
+    case CB.MEDIA_SKIP:      return 'skip'
+    case CB.CONFIRM_YES:     return 'confirm'
+    case CB.CONFIRM_EDIT:    return 'edit'
+    case CB.CONFIRM_CANCEL:  return '/cancel'
+    case CB.EDIT_ISSUE:      return '1'
+    case CB.EDIT_MEDIA:      return '2'
+    case CB.EDIT_LOCATION:   return '3'
+    case CB.EDIT_CONFIRM:    return 'confirm'
+    case CB.CANCEL:          return '/cancel'
+    default:                 return null
+  }
+}
 
 // ============================================================================
 // Stage label — citizen-friendly wording.
