@@ -97,12 +97,8 @@ export const BOT = {
 `👋 *Hi, I'm Vocal's assistant.*
 I help you report civic issues to your local organization.
 
-What would you like to do?
-• Type *report* — to file a new issue
-• Type *status* — to check a ticket you've already filed
-• Type *help* — to learn more
-
-You can type /cancel at any time to stop.`,
+*Tap a button below to get started.*
+You can send /cancel at any time to stop.`,
 
   help: () =>
 `*About Vocal*
@@ -114,26 +110,23 @@ I can help you with just two things:
 
 I won't give advice or discuss other topics — our team does that once your ticket is filed.
 
-Type *report* to start.`,
+Tap *Report an issue* below to start.`,
 
   unclear: () =>
-`Sorry, I didn't follow.
-Type *report* to file a new issue, *status* to check one you've filed, or *help* to learn what I can do.`,
+`Sorry, I didn't follow. Please pick one of the options below.`,
 
   startIssue: () =>
-`Got it. Please describe the issue in your own words — *what happened*, *where*, and *when* if you know.
+`Got it. Please *describe the issue* in your own words — what happened, where, and when if you know.
 
-You can also send a voice note instead of typing.
-Type /cancel to stop.`,
+You can also send a voice note instead of typing.`,
 
   askMedia: () =>
 `Thanks. If you have *photos or videos* that show the issue, send them now (one by one is fine).
 
-When you're done, type *done*.
-If you have no media, type *skip*.`,
+When you're done, tap *Done*. If you have no media, tap *Skip media*.`,
 
   mediaAdded: (count: number) =>
-`Got it — ${count} attachment${count === 1 ? '' : 's'} so far. Send more, or type *done* when finished. Type *skip* to skip.`,
+`Got it — ${count} attachment${count === 1 ? '' : 's'} so far. Send more, or tap *Done* when finished.`,
 
   askLocation: () =>
 `Last step — *where is this happening?*
@@ -142,7 +135,7 @@ Easiest: tap the 📎 attachment button and share your *Location* pin.
 Or just type the address, landmark, or area in a message.`,
 
   locationNeedsText: () =>
-`I need something for the location. Please *share a location pin* or *type the address* in text.`,
+`I need something for the location. Please *share a location pin* or type the address in a message.`,
 
   confirm: (args: { issue: string; mediaCount: number; location: string }) =>
 `*Please confirm*
@@ -153,33 +146,29 @@ ${args.issue}
 📎 *Attachments:* ${args.mediaCount}
 📍 *Location:* ${args.location}
 
-Reply *confirm* to file this, *edit* to change something, or /cancel to stop.`,
+Tap *Confirm & file* to submit, *Edit something* to make changes, or *Cancel* to stop.`,
 
   editMenu: () =>
-`What would you like to change?
-• Type *1* — issue description
-• Type *2* — attachments
-• Type *3* — location
-Or *confirm* to file as-is.`,
+`What would you like to change? Tap one of the options below.`,
 
   cancelled: () =>
-`Got it — cancelled. Type *report* whenever you're ready to start again.`,
+`Got it — cancelled. Tap *Report an issue* whenever you're ready to start again.`,
 
   filed: (ticketNumber: string) =>
 `✅ *Filed as \`${ticketNumber}\`*
 
 Our team will review this and someone from the organization will reach out to you. Thanks for reporting.
 
-You can type *status ${ticketNumber}* anytime to check progress, or *report* to file another issue.`,
+Tap *Check status* below anytime to see progress, or *Report another* to file a new issue.`,
 
   failed: () =>
-`Something went wrong while filing this. Please type *confirm* again to retry, or /cancel to stop.`,
+`Something went wrong while filing this. Please tap *Confirm & file* to retry, or /cancel to stop.`,
 
   statusNotFound: () =>
-`I couldn't find that ticket. Please check the number (e.g. *status VOC-DEMO-0001*), or type *status* by itself to check your most recent ticket.`,
+`I couldn't find that ticket. Please check the number (e.g. \`VOC-DEMO-0001\`) and try again, or tap *Check status* below to see your most recent ticket.`,
 
   statusNoRecent: () =>
-`You don't have a ticket on record yet. Type *report* to file one.`,
+`You don't have a ticket on record yet. Tap *Report an issue* below to file one.`,
 
   statusReply: (args: {
     ticketNumber: string
@@ -192,7 +181,7 @@ Stage: ${args.stage}
 Last update: ${args.lastUpdate}${args.latestNote ? `\n\nLatest note:\n${args.latestNote}` : ''}`,
 
   postTicketIdle: () =>
-`Type *report* to file another issue, or *status* to check an existing one.`,
+`Tap *Report another* to file a new issue, or *Check status* to see an existing one.`,
 } as const
 
 // ============================================================================
