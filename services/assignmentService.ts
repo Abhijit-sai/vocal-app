@@ -41,12 +41,18 @@ export interface CandidateWorker {
   id: string
   full_name: string
   distance_km: number | null
+  active_ticket_count: number
 }
 
 /**
- * Return all eligible ground workers for a ticket, sorted by distance to the
- * ticket's coordinates (falls back to territory membership when ticket has
- * no coordinates). Excludes workers already in `excludeUserIds`.
+ * Return all eligible ground workers for a ticket, ranked by:
+ *   1. Active ticket count ASC  (load balancing — lighter load first)
+ *   2. Distance to ticket ASC   (proximity — nearer first)
+ *
+ * Territory matching: if the ticket has a territory_id, we first try workers
+ * in that territory. If NONE are available (all excluded or none assigned),
+ * we fall back to ALL active ground workers in the org so the ticket never
+ * gets stuck. Workers already in `ticket.offered_worker_ids` are excluded.
  */
 export async function listCandidateWorkers(ticketId: string): Promise<CandidateWorker[]> {
   const supabase = createSupabaseServiceClient()
@@ -60,9 +66,7 @@ export async function listCandidateWorkers(ticketId: string): Promise<CandidateW
 
   const excluded = new Set<string>((ticket.offered_worker_ids as string[] | null) ?? [])
 
-  // Fetch all active ground workers in the org. We filter by territory in
-  // memory because user_territories is a join table and PostgREST doesn't
-  // let us filter parent by a child's field directly.
+  // Fetch all active ground workers in the org with their territory memberships.
   const { data: workers } = await supabase
     .from('users')
     .select(`
@@ -78,48 +82,83 @@ export async function listCandidateWorkers(ticketId: string): Promise<CandidateW
 
   if (!workers) return []
 
-  const candidates: CandidateWorker[] = []
-  const hasTerritoryFilter = !!ticket.territory_id
-  const hasCoords = ticket.latitude != null && ticket.longitude != null
+  // Count active (non-closed) tickets per worker for load balancing.
+  const { data: activeCounts } = await supabase
+    .from('tickets')
+    .select('owner_user_id')
+    .eq('organization_id', ticket.organization_id)
+    .neq('stage', 'closed')
+    .not('owner_user_id', 'is', null)
 
-  for (const w of workers as any[]) {
-    if (excluded.has(w.id)) continue
+  const loadMap = new Map<string, number>()
+  for (const t of activeCounts ?? []) {
+    if (t.owner_user_id) loadMap.set(t.owner_user_id, (loadMap.get(t.owner_user_id) ?? 0) + 1)
+  }
+
+  const ticketLat = ticket.latitude
+  const ticketLng = ticket.longitude
+  const hasCoords = ticketLat != null && ticketLng != null
+
+  function buildCandidate(w: any): CandidateWorker {
     const territories = (w.user_territories ?? []) as Array<{
       territory_id: string
       territories: { centroid_lat: number | null; centroid_lng: number | null } | null
     }>
-
-    if (hasTerritoryFilter && !territories.some(t => t.territory_id === ticket.territory_id)) {
-      continue
-    }
-
     let distance: number | null = null
-    if (hasCoords) {
+    if (hasCoords && ticketLat != null && ticketLng != null) {
       const coords = territories
         .map(t => t.territories)
         .filter(t => t?.centroid_lat != null && t?.centroid_lng != null) as Array<{ centroid_lat: number; centroid_lng: number }>
       if (coords.length) {
         distance = Math.min(...coords.map(c =>
           haversineKm(
-            { lat: ticket.latitude as number, lng: ticket.longitude as number },
+            { lat: ticketLat, lng: ticketLng },
             { lat: c.centroid_lat, lng: c.centroid_lng },
           )
         ))
       }
     }
-
-    candidates.push({ id: w.id, full_name: w.full_name, distance_km: distance })
+    return {
+      id: w.id,
+      full_name: w.full_name,
+      distance_km: distance,
+      active_ticket_count: loadMap.get(w.id) ?? 0,
+    }
   }
 
-  // Sort: known distance first (ascending), unknowns last.
-  candidates.sort((a, b) => {
-    if (a.distance_km == null && b.distance_km == null) return 0
-    if (a.distance_km == null) return 1
-    if (b.distance_km == null) return -1
-    return a.distance_km - b.distance_km
-  })
+  function sortCandidates(list: CandidateWorker[]): CandidateWorker[] {
+    return list.sort((a, b) => {
+      // Primary: fewer active tickets first (load balance)
+      if (a.active_ticket_count !== b.active_ticket_count)
+        return a.active_ticket_count - b.active_ticket_count
+      // Secondary: nearer first; nulls last
+      if (a.distance_km == null && b.distance_km == null) return 0
+      if (a.distance_km == null) return 1
+      if (b.distance_km == null) return -1
+      return a.distance_km - b.distance_km
+    })
+  }
 
-  return candidates
+  // First pass — territory-scoped (preferred)
+  if (ticket.territory_id) {
+    const territoryCandidates: CandidateWorker[] = []
+    for (const w of workers as any[]) {
+      if (excluded.has(w.id)) continue
+      const territories = (w.user_territories ?? []) as Array<{ territory_id: string }>
+      if (!territories.some(t => t.territory_id === ticket.territory_id)) continue
+      territoryCandidates.push(buildCandidate(w))
+    }
+    if (territoryCandidates.length > 0) return sortCandidates(territoryCandidates)
+    // Fall through → org-wide fallback below
+  }
+
+  // Org-wide fallback — try everyone who hasn't been offered yet
+  const allCandidates: CandidateWorker[] = []
+  for (const w of workers as any[]) {
+    if (excluded.has(w.id)) continue
+    allCandidates.push(buildCandidate(w))
+  }
+  return sortCandidates(allCandidates)
 }
 
 /**

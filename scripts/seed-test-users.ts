@@ -152,9 +152,73 @@ async function upsertSupabaseUser(u: TestUser, clerkUserId: string) {
   return data!.id
 }
 
+async function seedTerritories(workerIds: string[]) {
+  // Find or create a territory for this org so auto-assign has something to
+  // route against. We upsert a single "Demo Territory" with a centroid in
+  // Hyderabad so haversine distance sorting works during demos.
+  const { data: existing } = await supabase
+    .from('territories')
+    .select('id')
+    .eq('organization_id', ORG_ID!)
+    .limit(1)
+    .maybeSingle()
+
+  let territoryId: string
+
+  if (existing?.id) {
+    territoryId = existing.id
+    // Ensure centroid is set so distance sorting works
+    await supabase
+      .from('territories')
+      .update({ centroid_lat: 17.385, centroid_lng: 78.4867 })
+      .eq('id', territoryId)
+    console.log(`  ↳ Using existing territory ${territoryId}`)
+  } else {
+    // Find a level definition to attach the territory to
+    const { data: levelDef } = await supabase
+      .from('territory_level_definitions')
+      .select('id')
+      .eq('organization_id', ORG_ID!)
+      .order('level_order', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    const { data: newTerr, error } = await supabase
+      .from('territories')
+      .insert({
+        organization_id: ORG_ID!,
+        name: 'Demo Territory',
+        code: 'DEMO',
+        level_definition_id: levelDef?.id ?? null,
+        centroid_lat: 17.385,   // Hyderabad
+        centroid_lng: 78.4867,
+        active: true,
+      })
+      .select('id')
+      .single()
+    if (error || !newTerr) { console.error('  ✗ Failed to create territory:', error?.message); return }
+    territoryId = newTerr.id
+    console.log(`  ↳ Created territory ${territoryId} (Demo Territory, Hyderabad centroid)`)
+  }
+
+  // Upsert user_territories for every ground_worker
+  for (const workerId of workerIds) {
+    const { error } = await supabase
+      .from('user_territories')
+      .upsert(
+        { user_id: workerId, territory_id: territoryId, is_primary: true },
+        { onConflict: 'user_id,territory_id', ignoreDuplicates: true }
+      )
+    if (error) console.error(`  ✗ user_territories for ${workerId}:`, error.message)
+  }
+  console.log(`  ↳ Assigned ${workerIds.length} workers to territory ${territoryId}`)
+}
+
 async function main() {
   console.log(`Seeding ${USERS.length} users into org ${ORG_ID} ...`)
   const rows: Array<{ email: string; role: string; password: string; full_name: string; supabase_id: string }> = []
+  const workerSupabaseIds: string[] = []
+
   for (const u of USERS) {
     try {
       const clerkId = await createClerkUser(u)
@@ -166,10 +230,17 @@ async function main() {
         full_name: `${u.firstName} ${u.lastName}`,
         supabase_id: supaId,
       })
+      if (u.role === 'ground_worker') workerSupabaseIds.push(supaId)
       console.log(`  ✓ ${u.email}  (${u.role})`)
     } catch (err) {
       console.error(`  ✗ ${u.email}:`, err instanceof Error ? err.message : err)
     }
+  }
+
+  // Seed user_territories so auto-assign can find workers
+  if (workerSupabaseIds.length > 0) {
+    console.log(`\nSeeding territories for ${workerSupabaseIds.length} ground workers ...`)
+    await seedTerritories(workerSupabaseIds)
   }
 
   console.log('\nTest credentials (all users share the same password):\n')

@@ -84,6 +84,13 @@ const Icons = {
       <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
     </svg>
   ),
+  assignments: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="4" rx="1"/>
+      <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
+      <path d="M9 12l2 2 4-4"/>
+    </svg>
+  ),
 }
 
 const NAV_SECTIONS: NavSection[] = [
@@ -100,7 +107,7 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['super_admin', 'central_support'] },
       { label: 'All Tickets', href: '/tickets', icon: Icons.tickets,
         roles: ['super_admin', 'central_support', 'state_leader', 'district_leader'] },
-      { label: 'My Tickets', href: '/tickets?view=mine', icon: Icons.inbox,
+      { label: 'My Assignments', href: '/my-assignments', icon: Icons.assignments,
         roles: ['ground_worker'] },
       { label: 'Workers', href: '/workers', icon: Icons.workers,
         roles: ['super_admin', 'central_support', 'district_leader'] },
