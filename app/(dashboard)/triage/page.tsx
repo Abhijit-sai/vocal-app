@@ -11,29 +11,57 @@ export default async function TriagePage() {
   if (!user) redirect('/sign-in')
 
   const roleName = (user as any).roles?.name
-  if (!['super_admin', 'central_support'].includes(roleName)) {
+  const ALLOWED_ROLES = ['super_admin', 'central_support', 'state_leader', 'district_leader']
+  if (!ALLOWED_ROLES.includes(roleName)) {
     redirect('/dashboard')
   }
 
   const supabase = createSupabaseServiceClient()
 
+  // Leaders only triage their own territories. Central support + super_admin
+  // see org-wide. Fail-closed: a leader with zero assigned territories sees
+  // nothing (not everything) — same pattern as /tickets.
+  const UNRESTRICTED_ROLES = ['super_admin', 'central_support']
+  const isRestricted = !UNRESTRICTED_ROLES.includes(roleName)
+  let allowedTerritoryIds: string[] | null = null
+  if (isRestricted) {
+    const { data: ut } = await supabase
+      .from('user_territories')
+      .select('territory_id')
+      .eq('user_id', user.id)
+    allowedTerritoryIds = (ut ?? []).map((r: any) => r.territory_id)
+  }
+
+  const applyTerritoryScope = <T extends { in: (col: string, vals: string[]) => T; eq: (col: string, v: string) => T }>(q: T): T => {
+    if (!isRestricted) return q
+    if (allowedTerritoryIds && allowedTerritoryIds.length > 0) {
+      return q.in('territory_id', allowedTerritoryIds)
+    }
+    // Fail-closed sentinel: no territories means no rows.
+    return q.eq('territory_id', '00000000-0000-0000-0000-000000000000')
+  }
+
   const [triageResult, locationResult] = await Promise.all([
-    supabase
-      .from('tickets')
-      .select(TICKET_LIST_SELECT, { count: 'exact' })
-      .eq('organization_id', user.organization_id)
-      .eq('needs_triage', true)
-      .order('critical_flag', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(100),
-    supabase
-      .from('tickets')
-      .select(TICKET_LIST_SELECT)
-      .eq('organization_id', user.organization_id)
-      .eq('needs_location_validation_flag', true)
-      .neq('stage', 'closed')
-      .order('created_at', { ascending: false })
-      .limit(50),
+    applyTerritoryScope(
+      supabase
+        .from('tickets')
+        .select(TICKET_LIST_SELECT, { count: 'exact' })
+        .eq('organization_id', user.organization_id)
+        .eq('needs_triage', true)
+        .order('critical_flag', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(100) as any
+    ),
+    applyTerritoryScope(
+      supabase
+        .from('tickets')
+        .select(TICKET_LIST_SELECT)
+        .eq('organization_id', user.organization_id)
+        .eq('needs_location_validation_flag', true)
+        .neq('stage', 'closed')
+        .order('created_at', { ascending: false })
+        .limit(50) as any
+    ),
   ])
 
   const triageTickets = triageResult.data ?? []

@@ -96,15 +96,19 @@ const Icons = {
 const NAV_SECTIONS: NavSection[] = [
   {
     items: [
+      // Dashboard is for central support + org-wide leaders only; workers land
+      // on /my-assignments, district leaders on /tickets.
       { label: 'Dashboard', href: '/dashboard', icon: Icons.dashboard,
-        roles: ['super_admin', 'central_support', 'state_leader', 'district_leader', 'ground_worker'] },
+        roles: ['super_admin', 'central_support', 'state_leader'] },
     ],
   },
   {
     title: 'Operations',
     items: [
+      // Triage is handled by central support + leaders (state/district scope
+      // their triage to their own territories — enforced server-side).
       { label: 'Triage Queue', href: '/triage', icon: Icons.triage,
-        roles: ['super_admin', 'central_support'] },
+        roles: ['super_admin', 'central_support', 'state_leader', 'district_leader'] },
       { label: 'All Tickets', href: '/tickets', icon: Icons.tickets,
         roles: ['super_admin', 'central_support', 'state_leader', 'district_leader'] },
       { label: 'My Assignments', href: '/my-assignments', icon: Icons.assignments,

@@ -14,7 +14,10 @@ export default async function MyAssignmentsPage() {
 
   const supabase = createSupabaseServiceClient()
 
-  // Current offered assignment (if any)
+  // Current offered assignment (if any). Exclude expired offers — the cron
+  // sweeps them minute-by-minute but we don't want workers tapping a stale
+  // "Accept" in the gap between expiry and the cron run.
+  const nowISO = new Date().toISOString()
   const { data: offeredRaw } = await supabase
     .from('ticket_assignments')
     .select(`
@@ -28,6 +31,7 @@ export default async function MyAssignmentsPage() {
     .eq('worker_user_id', user.id)
     .eq('is_current', true)
     .eq('status', 'offered')
+    .gt('expires_at', nowISO)
     .maybeSingle()
 
   // Active accepted tickets owned by this worker

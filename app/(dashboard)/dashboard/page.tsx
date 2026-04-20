@@ -132,6 +132,14 @@ export default async function DashboardPage() {
   const user = await getCurrentVocalUser()
   if (!user) redirect('/sign-in')
 
+  // Dashboard is the org-wide health view — only useful to roles with
+  // org-wide visibility. Scope everyone else to their own workbench so they
+  // don't see stats they can't act on (and don't accidentally leak cross-
+  // territory counts to a district leader).
+  const roleName = (user as any).roles?.name
+  if (roleName === 'ground_worker') redirect('/my-assignments')
+  if (roleName === 'district_leader') redirect('/tickets')
+
   const supabase = createSupabaseServiceClient()
   const stats = await getDashboardStats(user.organization_id, supabase)
   const userName = (user as any).full_name ?? 'there'

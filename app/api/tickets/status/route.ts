@@ -57,6 +57,10 @@ const WORKER_ALLOWED_SUB_STATUSES = new Set([
   'escalated_to_authority',
   'awaiting_citizen_response',
   'awaiting_documents_evidence',
+  // Workers can flag a ticket as likely spam/fake for central support to
+  // review. This is a sideways move to on_hold — stage-order check still
+  // protects against accidental backward moves from closed.
+  'suspected_fake_spam_review',
 ])
 
 const STAGE_ORDER: Record<string, number> = {
