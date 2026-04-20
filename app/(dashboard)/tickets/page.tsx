@@ -3,7 +3,7 @@ import { getCurrentVocalUser, createSupabaseServiceClient } from "@/lib/supabase
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TicketTable } from '@/components/tickets/TicketTable'
 import { TICKET_LIST_SELECT } from '@/services/ticketQueries'
-import type { TicketStage, Severity } from '@/types/database'
+import type { TicketStage, Severity, RoleName } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,10 +12,17 @@ interface SearchParams {
   severity?: Severity | 'any'
   sla?: 'breached'
   loc?: 'with' | 'without'
+  territory?: string  // territory UUID, or 'all' (only valid for privileged roles)
   view?: string
   search?: string
   page?: string
 }
+
+/**
+ * Roles that see every ticket in the org by default. Other roles (state_leader,
+ * district_leader) are automatically scoped to their user_territories.
+ */
+const UNRESTRICTED_ROLES: RoleName[] = ['super_admin', 'central_support']
 
 const STAGE_FILTERS: { label: string; value: TicketStage | 'all' }[] = [
   { label: 'All',         value: 'all'         },
@@ -44,6 +51,41 @@ export default async function TicketsPage({
 
   const supabase = createSupabaseServiceClient()
 
+  const roleName = ((user as any).roles?.name ?? null) as RoleName | null
+  const isUnrestricted = roleName != null && UNRESTRICTED_ROLES.includes(roleName)
+
+  // Fetch territories the *user* can see and pick from. For unrestricted roles
+  // this is every territory in the org; for leaders it's only their own rows
+  // in user_territories.
+  let territoryOptions: { id: string; name: string }[] = []
+  if (isUnrestricted) {
+    const { data } = await supabase
+      .from('territories')
+      .select('id, name')
+      .eq('organization_id', user.organization_id)
+      .order('name', { ascending: true })
+    territoryOptions = data ?? []
+  } else {
+    const { data } = await supabase
+      .from('user_territories')
+      .select('territories(id, name)')
+      .eq('user_id', user.id)
+    territoryOptions = (data ?? [])
+      .map((r: any) => Array.isArray(r.territories) ? r.territories[0] : r.territories)
+      .filter((t: any): t is { id: string; name: string } => !!t && !!t.id)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+  const allowedTerritoryIds = territoryOptions.map(t => t.id)
+
+  // Resolve the effective territory filter.
+  //  - Unrestricted roles: 'all' (or unset) = no filter; specific id = that territory.
+  //  - Restricted roles:   no param = all their territories; specific id = that one
+  //    (only if it's in their allowed set). Ignore any out-of-scope id silently.
+  const requestedTerritory = params.territory && params.territory !== 'all' ? params.territory : null
+  const validTerritoryFilter = requestedTerritory && (
+    isUnrestricted || allowedTerritoryIds.includes(requestedTerritory)
+  ) ? requestedTerritory : null
+
   const page = parseInt(params.page ?? '1', 10)
   const limit = 50
   const offset = (page - 1) * limit
@@ -54,6 +96,18 @@ export default async function TicketsPage({
     .eq('organization_id', user.organization_id)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
+
+  // Territory scoping — applied BEFORE other filters so restricted roles
+  // can never see tickets outside their territories.
+  if (validTerritoryFilter) {
+    query = query.eq('territory_id', validTerritoryFilter)
+  } else if (!isUnrestricted && allowedTerritoryIds.length > 0) {
+    query = query.in('territory_id', allowedTerritoryIds)
+  } else if (!isUnrestricted && allowedTerritoryIds.length === 0) {
+    // Restricted role with no territories assigned — show nothing rather
+    // than leaking every ticket.
+    query = query.eq('territory_id', '00000000-0000-0000-0000-000000000000')
+  }
 
   if (params.stage)                                 query = query.eq('stage', params.stage)
   if (params.severity && params.severity !== 'any') query = query.eq('severity', params.severity)
@@ -90,13 +144,18 @@ export default async function TicketsPage({
     params.severity && params.severity !== 'any',
     params.sla === 'breached',
     params.loc === 'with' || params.loc === 'without',
+    !!validTerritoryFilter,
   ].filter(Boolean).length
+
+  const activeTerritoryName = validTerritoryFilter
+    ? territoryOptions.find(t => t.id === validTerritoryFilter)?.name ?? null
+    : null
 
   return (
     <div>
       <PageHeader
         title="Tickets"
-        subtitle={`${count ?? 0} ticket${(count ?? 0) !== 1 ? 's' : ''}${params.stage ? ` · ${params.stage.replace('_', ' ')}` : ''}${activeExtra ? ` · ${activeExtra} filter${activeExtra > 1 ? 's' : ''}` : ''}`}
+        subtitle={`${count ?? 0} ticket${(count ?? 0) !== 1 ? 's' : ''}${params.stage ? ` · ${params.stage.replace('_', ' ')}` : ''}${activeTerritoryName ? ` · ${activeTerritoryName}` : ''}${!isUnrestricted && !activeTerritoryName ? ' · your territories' : ''}${activeExtra ? ` · ${activeExtra} filter${activeExtra > 1 ? 's' : ''}` : ''}`}
       />
 
       <div className="p-6 sm:p-8 space-y-4 max-w-[1400px] mx-auto">
@@ -126,10 +185,11 @@ export default async function TicketsPage({
 
           {/* Search */}
           <form method="GET" action="/tickets" className="ml-auto relative">
-            {params.stage    && <input type="hidden" name="stage"    value={params.stage} />}
-            {params.severity && <input type="hidden" name="severity" value={params.severity} />}
-            {params.sla      && <input type="hidden" name="sla"      value={params.sla} />}
-            {params.loc      && <input type="hidden" name="loc"      value={params.loc} />}
+            {params.stage            && <input type="hidden" name="stage"     value={params.stage} />}
+            {params.severity         && <input type="hidden" name="severity"  value={params.severity} />}
+            {params.sla              && <input type="hidden" name="sla"       value={params.sla} />}
+            {params.loc              && <input type="hidden" name="loc"       value={params.loc} />}
+            {validTerritoryFilter    && <input type="hidden" name="territory" value={validTerritoryFilter} />}
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -212,9 +272,50 @@ export default async function TicketsPage({
             Missing location
           </a>
 
-          {(params.severity || params.sla || params.loc || params.search) && (
+          {/* Territory filter. Unrestricted roles see the picker if any territories
+              exist in the org; leaders only see it when they have more than one
+              assigned. Submission is a plain GET form with an Apply button — no
+              JS required, and it re-uses Next.js's server-component rerender. */}
+          {territoryOptions.length > 0 && (isUnrestricted || territoryOptions.length > 1) && (
+            <form method="GET" action="/tickets" className="flex items-center gap-1">
+              {params.stage    && <input type="hidden" name="stage"    value={params.stage} />}
+              {params.severity && <input type="hidden" name="severity" value={params.severity} />}
+              {params.sla      && <input type="hidden" name="sla"      value={params.sla} />}
+              {params.loc      && <input type="hidden" name="loc"      value={params.loc} />}
+              {params.search   && <input type="hidden" name="search"   value={params.search} />}
+              <select
+                name="territory"
+                defaultValue={validTerritoryFilter ?? 'all'}
+                className="px-2.5 py-1.5 rounded-md font-medium border text-xs outline-none"
+                style={{
+                  borderColor: validTerritoryFilter ? 'var(--primary)' : 'var(--canvas-border)',
+                  background:  validTerritoryFilter ? 'var(--brand-50)' : 'var(--canvas-surface)',
+                  color:       validTerritoryFilter ? 'var(--primary)'  : 'var(--canvas-text-dim)',
+                }}
+              >
+                <option value="all">
+                  {isUnrestricted ? '🗺 All territories' : '🗺 My territories'}
+                </option>
+                {territoryOptions.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="px-2 py-1.5 text-xs rounded-md border font-medium"
+                style={{ borderColor: 'var(--canvas-border)', color: 'var(--canvas-text-dim)' }}
+              >
+                Apply
+              </button>
+            </form>
+          )}
+
+          {(params.severity || params.sla || params.loc || params.search || validTerritoryFilter) && (
             <a
-              href={buildHref({ severity: undefined, sla: undefined, loc: undefined, search: undefined })}
+              href={buildHref({
+                severity: undefined, sla: undefined, loc: undefined,
+                search: undefined, territory: undefined,
+              })}
               className="ml-auto px-2.5 py-1.5 rounded-md font-medium"
               style={{ color: 'var(--canvas-muted)' }}
             >

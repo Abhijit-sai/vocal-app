@@ -7,7 +7,20 @@ import { formatDistanceToNow } from 'date-fns'
 import type { TicketStage } from '@/types/database'
 
 async function getDashboardStats(orgId: string, supabase: ReturnType<typeof createSupabaseServiceClient>) {
-  const [totalRes, stageRes, criticalRes, triageRes, slaRes, recentRes] = await Promise.all([
+  // --- time windows (all in UTC ISO strings) ----------------------------------
+  const now = new Date()
+  const thirtyDaysAgoISO = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  // Week boundaries: treat "this week" as the rolling 7-day window ending now,
+  // and "last week" as the 7 days before that. Simpler + more intuitive than
+  // Sunday/Monday-based weeks across time zones.
+  const sevenDaysAgoISO     = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000).toISOString()
+  const fourteenDaysAgoISO  = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [
+    totalRes, stageRes, criticalRes, triageRes, slaRes, recentRes,
+    firstContactRes, closedThisWeekRes, closedLastWeekRes,
+    activeWorkerTicketsRes, totalWorkersRes, pendingOffersRes,
+  ] = await Promise.all([
     supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('organization_id', orgId),
     supabase.from('tickets').select('stage').eq('organization_id', orgId),
     supabase.from('tickets').select('id', { count: 'exact', head: true })
@@ -21,6 +34,35 @@ async function getDashboardStats(orgId: string, supabase: ReturnType<typeof crea
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
       .limit(6),
+    // Avg time-to-first-contact: tickets accepted in the last 30 days.
+    supabase.from('tickets').select('created_at, accepted_at')
+      .eq('organization_id', orgId)
+      .not('accepted_at', 'is', null)
+      .gte('created_at', thirtyDaysAgoISO),
+    // Closed in the last 7 days.
+    supabase.from('tickets').select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId).eq('stage', 'closed')
+      .gte('updated_at', sevenDaysAgoISO),
+    // Closed in the 7 days before that.
+    supabase.from('tickets').select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId).eq('stage', 'closed')
+      .gte('updated_at', fourteenDaysAgoISO)
+      .lt('updated_at', sevenDaysAgoISO),
+    // Active workers = distinct owner_user_id on non-closed tickets.
+    supabase.from('tickets').select('owner_user_id')
+      .eq('organization_id', orgId)
+      .neq('stage', 'closed')
+      .not('owner_user_id', 'is', null),
+    // Total active ground workers in org.
+    supabase.from('users').select('id, roles!inner(name)', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('active', true)
+      .eq('roles.name', 'ground_worker'),
+    // Pending offers (assignments awaiting worker response).
+    supabase.from('ticket_assignments').select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('status', 'offered')
+      .eq('is_current', true),
   ])
 
   const stageCounts: Record<TicketStage, number> = {
@@ -31,6 +73,26 @@ async function getDashboardStats(orgId: string, supabase: ReturnType<typeof crea
     if (s in stageCounts) stageCounts[s]++
   }
 
+  // Avg first-contact latency in minutes (only over rows we could compute).
+  let firstContactMinutes: number | null = null
+  const fcRows = firstContactRes.data ?? []
+  if (fcRows.length > 0) {
+    let sum = 0
+    let n = 0
+    for (const r of fcRows) {
+      if (!r.created_at || !r.accepted_at) continue
+      const diffMs = new Date(r.accepted_at).getTime() - new Date(r.created_at).getTime()
+      if (diffMs >= 0) { sum += diffMs; n++ }
+    }
+    firstContactMinutes = n > 0 ? Math.round(sum / n / 60000) : null
+  }
+
+  // Distinct active workers (have at least one non-closed ticket assigned).
+  const activeWorkerIds = new Set<string>()
+  for (const row of activeWorkerTicketsRes.data ?? []) {
+    if (row.owner_user_id) activeWorkerIds.add(row.owner_user_id as string)
+  }
+
   return {
     total: totalRes.count ?? 0,
     stageCounts,
@@ -38,7 +100,32 @@ async function getDashboardStats(orgId: string, supabase: ReturnType<typeof crea
     triage: triageRes.count ?? 0,
     slaBreach: slaRes.count ?? 0,
     recent: recentRes.data ?? [],
+    firstContactMinutes,
+    closedThisWeek: closedThisWeekRes.count ?? 0,
+    closedLastWeek: closedLastWeekRes.count ?? 0,
+    activeWorkers:  activeWorkerIds.size,
+    totalWorkers:   totalWorkersRes.count ?? 0,
+    pendingOffers:  pendingOffersRes.count ?? 0,
   }
+}
+
+// Format a minute count as "2h 15m", "45m", or "—" when null.
+function formatMinutes(mins: number | null): string {
+  if (mins == null) return '—'
+  if (mins < 60) return `${mins}m`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+// Percentage delta vs prior period. Returns { label, tone } or null if no prior data.
+function weekOverWeek(current: number, prior: number): { label: string; tone: 'up' | 'down' | 'flat' } {
+  if (prior === 0 && current === 0) return { label: 'no change', tone: 'flat' }
+  if (prior === 0)                  return { label: 'new',       tone: 'up'   }
+  const pct = Math.round(((current - prior) / prior) * 100)
+  if (pct === 0)  return { label: 'no change',      tone: 'flat' }
+  if (pct > 0)    return { label: `▲ ${pct}% WoW`,  tone: 'up'   }
+  return { label: `▼ ${Math.abs(pct)}% WoW`, tone: 'down' }
 }
 
 export default async function DashboardPage() {
@@ -224,6 +311,91 @@ export default async function DashboardPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* ======================= OPERATIONAL HEALTH ======================= */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--canvas-muted)' }}>
+              Operational Health
+            </h2>
+            <span className="text-[11px]" style={{ color: 'var(--canvas-muted)' }}>
+              Last 30 days · rolling windows
+            </span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Avg time to first contact */}
+            <div className="card p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--canvas-muted)' }}>
+                Avg 1st contact
+              </div>
+              <div className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--canvas-text)' }}>
+                {formatMinutes(stats.firstContactMinutes)}
+              </div>
+              <div className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--canvas-muted)' }}>
+                From file → worker accept, 30-day avg
+              </div>
+            </div>
+
+            {/* Closed this week + WoW delta */}
+            {(() => {
+              const wow = weekOverWeek(stats.closedThisWeek, stats.closedLastWeek)
+              const toneColor =
+                wow.tone === 'up'   ? 'var(--alert-success-text, #16a34a)' :
+                wow.tone === 'down' ? 'var(--alert-danger-text)' :
+                                      'var(--canvas-muted)'
+              return (
+                <div className="card p-4">
+                  <div className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--canvas-muted)' }}>
+                    Closed this week
+                  </div>
+                  <div className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--canvas-text)' }}>
+                    {stats.closedThisWeek}
+                  </div>
+                  <div className="text-[11px] mt-1 leading-tight tabular-nums" style={{ color: toneColor }}>
+                    {wow.label} · prev {stats.closedLastWeek}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Active workers */}
+            <div className="card p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--canvas-muted)' }}>
+                Active workers
+              </div>
+              <div className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--canvas-text)' }}>
+                {stats.activeWorkers}
+                <span className="text-sm font-medium ml-1" style={{ color: 'var(--canvas-muted)' }}>
+                  / {stats.totalWorkers}
+                </span>
+              </div>
+              <div className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--canvas-muted)' }}>
+                Workers with at least one open ticket
+              </div>
+            </div>
+
+            {/* Pending offers */}
+            <Link
+              href="/tickets?stage=in_progress"
+              className="card card-hover p-4 block group"
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--canvas-muted)' }}>
+                  Pending offers
+                </span>
+                <span className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--canvas-muted)' }}>
+                  View →
+                </span>
+              </div>
+              <div className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--canvas-text)' }}>
+                {stats.pendingOffers}
+              </div>
+              <div className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--canvas-muted)' }}>
+                Awaiting worker accept / reject
+              </div>
+            </Link>
           </div>
         </section>
 
