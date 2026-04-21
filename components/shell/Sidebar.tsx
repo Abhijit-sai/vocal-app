@@ -91,6 +91,11 @@ const Icons = {
       <path d="M9 12l2 2 4-4"/>
     </svg>
   ),
+  jobs: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  ),
 }
 
 const NAV_SECTIONS: NavSection[] = [
@@ -132,6 +137,10 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'Admin',
     items: [
       { label: 'Audit Log', href: '/audit', icon: Icons.audit,
+        roles: ['super_admin', 'central_support'] },
+      // Manual job runner — stands in for the Vercel cron while we're on
+      // Hobby. Central support taps it to sweep expired offers.
+      { label: 'Jobs', href: '/jobs', icon: Icons.jobs,
         roles: ['super_admin', 'central_support'] },
     ],
   },
