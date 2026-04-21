@@ -22,6 +22,10 @@ interface SidebarProps {
   userRole: RoleName
   orgName: string
   userName: string
+  /** When true, render as an icon-only rail (desktop collapsed mode). */
+  collapsed?: boolean
+  /** Called when the user taps a nav link — used to close the mobile drawer. */
+  onNavigate?: () => void
 }
 
 // Simple inline SVG icons to avoid adding an icon library dependency
@@ -146,11 +150,17 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
-function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
+function NavLink({ item, isActive, collapsed, onNavigate }: {
+  item: NavItem; isActive: boolean; collapsed?: boolean; onNavigate?: () => void
+}) {
   return (
     <Link
       href={item.href}
-      className="group relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition-colors"
+      onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
+      className={`group relative flex items-center rounded-md text-[13px] transition-colors ${
+        collapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-2.5 py-1.5'
+      }`}
       style={{
         color: isActive ? 'var(--shell-text)' : 'var(--shell-text-dim)',
         background: isActive ? 'var(--shell-surface-hi)' : 'transparent',
@@ -169,8 +179,8 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
       >
         {item.icon}
       </span>
-      <span className="truncate">{item.label}</span>
-      {item.badge != null && item.badge > 0 && (
+      {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && item.badge != null && item.badge > 0 && (
         <span
           className="ml-auto text-[10px] px-1.5 rounded-full font-medium min-w-[18px] text-center"
           style={{ background: 'var(--primary)', color: 'white' }}
@@ -182,17 +192,17 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
   )
 }
 
-export function Sidebar({ userRole, orgName, userName }: SidebarProps) {
+export function Sidebar({ userRole, orgName, userName, collapsed = false, onNavigate }: SidebarProps) {
   const pathname = usePathname()
 
   return (
     <aside
-      className="flex flex-col w-60 flex-shrink-0 shell-scroll"
+      className={`flex flex-col flex-shrink-0 shell-scroll h-full ${collapsed ? 'w-14' : 'w-60'}`}
       style={{ background: 'var(--shell-bg)', borderRight: '1px solid var(--shell-border)' }}
     >
       {/* Brand */}
       <div
-        className="flex items-center gap-2.5 px-4 py-4"
+        className={`flex items-center py-4 ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-4'}`}
         style={{ borderBottom: '1px solid var(--shell-border)' }}
       >
         <div
@@ -204,24 +214,26 @@ export function Sidebar({ userRole, orgName, userName }: SidebarProps) {
         >
           V
         </div>
-        <div className="min-w-0">
-          <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--shell-text)' }}>
-            Vocal
+        {!collapsed && (
+          <div className="min-w-0">
+            <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--shell-text)' }}>
+              Vocal
+            </div>
+            <div className="text-[11px] truncate" style={{ color: 'var(--shell-muted)' }}>
+              {orgName}
+            </div>
           </div>
-          <div className="text-[11px] truncate" style={{ color: 'var(--shell-muted)' }}>
-            {orgName}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+      <nav className={`flex-1 py-3 overflow-y-auto ${collapsed ? 'px-1.5' : 'px-3'}`}>
         {NAV_SECTIONS.map((section, sIdx) => {
           const visibleItems = section.items.filter(i => i.roles.includes(userRole))
           if (visibleItems.length === 0) return null
           return (
             <div key={sIdx} className={sIdx === 0 ? '' : 'mt-5'}>
-              {section.title && (
+              {section.title && !collapsed && (
                 <div
                   className="px-2.5 mb-1 text-[10px] font-semibold uppercase tracking-wider"
                   style={{ color: 'var(--shell-muted)' }}
@@ -229,13 +241,24 @@ export function Sidebar({ userRole, orgName, userName }: SidebarProps) {
                   {section.title}
                 </div>
               )}
+              {section.title && collapsed && sIdx > 0 && (
+                <div className="mx-1.5 my-2 border-t" style={{ borderColor: 'var(--shell-border)' }} />
+              )}
               <div className="space-y-0.5">
                 {visibleItems.map(item => {
                   const itemPath = item.href.split('?')[0]
                   const isActive =
                     pathname === itemPath ||
                     (itemPath !== '/' && itemPath !== '/dashboard' && pathname.startsWith(itemPath))
-                  return <NavLink key={item.href} item={item} isActive={isActive} />
+                  return (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      isActive={isActive}
+                      collapsed={collapsed}
+                      onNavigate={onNavigate}
+                    />
+                  )
                 })}
               </div>
             </div>
@@ -245,18 +268,20 @@ export function Sidebar({ userRole, orgName, userName }: SidebarProps) {
 
       {/* User section */}
       <div
-        className="px-3 py-3 flex items-center gap-2.5"
+        className={`py-3 flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-3'}`}
         style={{ borderTop: '1px solid var(--shell-border)' }}
       >
         <UserButton />
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium truncate" style={{ color: 'var(--shell-text)' }}>
-            {userName}
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium truncate" style={{ color: 'var(--shell-text)' }}>
+              {userName}
+            </div>
+            <div className="text-[11px] capitalize truncate" style={{ color: 'var(--shell-muted)' }}>
+              {userRole.replace(/_/g, ' ')}
+            </div>
           </div>
-          <div className="text-[11px] capitalize truncate" style={{ color: 'var(--shell-muted)' }}>
-            {userRole.replace(/_/g, ' ')}
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   )

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
-import { Sidebar } from '@/components/shell/Sidebar'
+import { AppShell } from '@/components/shell/AppShell'
 import { getCurrentVocalUser } from '@/lib/supabase/server'
 import type { RoleName } from '@/types/database'
 
@@ -44,15 +44,12 @@ export default async function DashboardLayout({
   const roleName = (user as any).roles?.name as RoleName
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        userRole={roleName}
-        orgName={(user as any).organizations?.name ?? 'Vocal'}
-        userName={user.full_name}
-      />
-      <main className="flex-1 overflow-y-auto" style={{ background: 'var(--canvas-bg)' }}>
-        {children}
-      </main>
-    </div>
+    <AppShell
+      userRole={roleName}
+      orgName={(user as any).organizations?.name ?? 'Vocal'}
+      userName={user.full_name}
+    >
+      {children}
+    </AppShell>
   )
 }

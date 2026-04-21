@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, actions, breadcrumbs }: PageHeader
         backdropFilter: 'saturate(180%) blur(8px)',
       }}
     >
-      <div className="px-6 sm:px-8 py-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 max-w-[1400px] mx-auto">
+      <div className="px-4 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 max-w-[1400px] mx-auto">
         <div className="min-w-0">
           {breadcrumbs && (
             <div

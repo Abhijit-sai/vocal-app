@@ -189,7 +189,7 @@ export default async function DashboardPage() {
         subtitle={now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
       />
 
-      <div className="p-6 sm:p-8 space-y-8 max-w-[1400px] mx-auto">
+      <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-w-[1400px] mx-auto">
 
         {/* ======================= ACTION REQUIRED ======================= */}
         <section>
