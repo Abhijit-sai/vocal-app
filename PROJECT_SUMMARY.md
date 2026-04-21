@@ -1,6 +1,6 @@
 # Vocal — Project Summary
 
-**Last updated:** 2026-04-20 (shipped to prod, worker queue + load balancing)
+**Last updated:** 2026-04-22 (Jobs module, mobile/toggle shell, Amplify campaign tones)
 **Purpose:** Persistent context for future Claude sessions. Read this first before
 making changes — it captures the current state of the codebase, known bugs,
 pending work, and important gotchas that are not obvious from the code.
@@ -14,8 +14,28 @@ pending work, and important gotchas that are not obvious from the code.
 
 ## 0. Where we left off (resume here)
 
-**Latest session (2026-04-20): shipped to prod + worker queue + load-balanced
-assignment.** The app now lives at **https://vocal-app-one.vercel.app**
+**Latest session (2026-04-22): Jobs module, responsive shell, Amplify
+campaign tones.** See §13 for the full log. Top things that changed:
+
+- Removed `vercel.json` cron (free tier). Manual **Jobs** page at
+  `/jobs` for central_support / super_admin to trigger
+  `expire-assignments` and see a rolling audit log.
+- Mobile-responsive AppShell with a toggleable sidebar (desktop
+  collapse persisted in localStorage; mobile drawer with backdrop).
+- Directory "add contact" modal centered + added `phone` (mobile) +
+  `phone_alternate` fields; responsive grid.
+- Amplify prompts rewritten for post-ready campaign/escalation
+  content. Three new tones: `activist`, `opposition`, `public_shame`.
+  Migration 005 widens the `amplify_generated_outputs_tone_check`
+  constraint. Default OpenRouter model changed to
+  `google/gemini-2.5-flash` (preview alias was retired and 404'd).
+  Fallback banner now surfaces the raw OpenRouter error so the next
+  provider/model issue is visible from the UI.
+- Worker offer popup: `router.refresh()` on detection + dismiss so
+  "Review in page" no longer leaves an empty offered-card.
+
+**Previous session (2026-04-20): shipped to prod + worker queue + load-balanced
+assignment.** The app lives at **https://vocal-app-one.vercel.app**
 (GitHub: `Abhijit-sai/vocal-app`). Prod Telegram webhook is registered
 permanently against the Vercel URL — no more cloudflared cycling for
 demos. Ground workers finally have their own UI at `/my-assignments`,
@@ -769,9 +789,10 @@ deployed.
 
 ### Still pending after this session
 
-- **`vercel.json` cron** for `/api/assignments/expire` — the endpoint
-  exists and is correct, there's just no trigger yet. User explicitly
-  deferred.
+- ~~**`vercel.json` cron** for `/api/assignments/expire`~~ — replaced
+  on 2026-04-22 with a manual-run Jobs module (see §13). Free tier
+  doesn't allow minute-level crons; the Jobs page gives central_support
+  a Run-Now button and an audit trail for demo purposes.
 - Territory filter on `/tickets` list.
 - Territory/worker admin UI (right now territories are seeded via
   script; there's no in-app way to draw a radius).
@@ -779,3 +800,164 @@ deployed.
   SLA breach count).
 - Downloading Telegram attachments server-side (still pointers).
 - Actual tests.
+
+---
+
+## 13. 2026-04-22 session — Jobs module, responsive shell, Amplify campaign tones
+
+Polish session focused on (a) making the app demo-able on phone and
+without a Vercel Pro subscription, (b) fixing UX bugs reported against
+the worker queue + directory, and (c) making Amplify actually produce
+post-ready campaign content.
+
+### 13a. Manual Jobs module (replaces Vercel cron)
+
+User is on Vercel free tier, which doesn't support minute-level
+crons. Instead of deferring expire-assignments until paid, we built a
+manual-run Jobs page.
+
+- **Deleted** `vercel.json`.
+- **New** `app/api/jobs/run-expire/route.ts` — POST, role-gated to
+  `super_admin` + `central_support`. Calls `expireStaleAssignments()`
+  and writes an `audit_logs` row:
+  `event_type = 'job_expire_assignments_run'` with
+  `new_value_json = { started_at, finished_at, expired, re_offered,
+  escalated, sla_breached, ok, error? }`.
+- **New** `app/(dashboard)/jobs/page.tsx` — server component listing
+  the last 50 job-run audit rows, joined with
+  `users:actor_user_id(full_name)` for attribution.
+- **New** `components/jobs/JobsRunner.tsx` — client "Run now" button.
+  Optimistically prepends a synthetic row for instant UX and calls
+  `router.refresh()` in the background. Renders
+  Expired/Re-offered/Escalated/SLA-breached counters and a scrolling
+  log.
+- Sidebar gets a new `Jobs` entry under roles `super_admin`,
+  `central_support`.
+
+### 13b. Responsive AppShell + toggleable sidebar
+
+Previously the dashboard layout mounted a fixed sidebar with no way
+to hide it, which made mobile unusable.
+
+- **New** `components/shell/AppShell.tsx` (client component) — wraps
+  the whole dashboard area.
+  - **Desktop (`md+`)**: Sidebar is always mounted. A collapse/expand
+    state is persisted in `localStorage` under
+    `vocal:sidebar-collapsed`. Collapsed = icon-only with `title`
+    tooltips.
+  - **Mobile (`<md`)**: Sidebar becomes a drawer.
+    `translate-x-full/0` transition, backdrop at `rgba(0,0,0,0.55)`,
+    Escape closes, body scroll locked while open. `onNavigate` closes
+    the drawer after any link click.
+- `components/shell/Sidebar.tsx` extended with `collapsed` + `onNavigate`
+  props. NavLink respects collapsed (icon-only mode).
+- `app/(dashboard)/layout.tsx` replaced inline chrome with `<AppShell>`.
+- `app/(dashboard)/dashboard/page.tsx` + `components/ui/PageHeader.tsx`
+  tightened outer padding (`p-6 sm:p-8` → `p-4 sm:p-8`) so cards
+  breathe on narrow viewports.
+
+### 13c. Worker offer popup — "Review in page" no longer leaves empty state
+
+The poll-driven offer popup was detecting new offers via client-side
+polling, but the surrounding `OfferedCard` was server-rendered from
+stale SSR. Clicking "Review in page" dismissed the modal and the user
+saw nothing because the SSR list hadn't caught up.
+
+- `components/workers/WorkerQueue.tsx`: on poll-detection of a new
+  offer AND on modal dismiss, wrap a `router.refresh()` in
+  `startTransition()` so the server component re-runs and the offered
+  card is in the DOM by the time the modal closes.
+
+### 13d. Directory contact modal — centered + mobile number field
+
+- `components/directory/ContactFormDialog.tsx`:
+  - Wrapped the card in a `min-h-full flex items-center justify-center
+    p-4` container with `my-auto` on the card so the modal centers on
+    tall viewports AND scrolls cleanly on short ones (Tailwind UI's
+    scrollable-backdrop pattern).
+  - Renamed existing phone field to **Mobile number** with
+    `type="tel"`, `inputMode="tel"`, `autoComplete="tel"`, +91
+    placeholder. Added an optional **Alternate phone** field
+    (`phone_alternate`, already on the schema).
+  - Grids changed from `grid-cols-2` to `grid-cols-1 sm:grid-cols-2`
+    so they stack on mobile.
+
+### 13e. Amplify — post-ready campaign/escalation content
+
+User feedback: "content is generating but not ready for posting —
+needs to help the org escalate, e.g. opposition going after the
+government on social media to get eyeballs."
+
+- `services/amplifyService.ts` extended:
+  - `AmplifyTone` now includes `'activist' | 'opposition' | 'public_shame'`.
+  - New `toneGuidance(tone)` with per-tone voice instructions.
+  - New `isCampaignTone(tone)` helper.
+  - `systemPromptFor(platform, tone)` rewritten per-platform — explicit
+    hook/body/CTA structure, `[@Handle]` / `[@CMO]` placeholders,
+    **non-negotiable legal-safety base rules** ("never assert crime
+    unless source proves it", "qualify opinion with 'appears to'",
+    "never invent names or statistics").
+- `components/amplify/AmplifyEditor.tsx`: tone `<select>` groups
+  neutral vs campaign via `<optgroup>`. Helper text appears under the
+  select when a campaign tone is chosen, warning the user to review
+  before posting.
+- `app/api/amplify/sessions/[id]/generate/route.ts`: server-side
+  `TONES` allowlist extended (without this the API rejects with
+  `{error:"Invalid tone"}`).
+- **Migration 005** `supabase/migrations/005_amplify_campaign_tones.sql`:
+  drops `amplify_generated_outputs_tone_check` and re-adds it with
+  the three new values. Applied manually in the Supabase SQL Editor.
+
+### 13f. Amplify "regenerate returns same content" — root cause
+
+Two issues, both fixed:
+
+1. **Default model was a dead alias.** `google/gemini-2.5-flash-preview`
+   was retired on OpenRouter and 404'd every call, silently falling
+   back to the deterministic template — which is why regenerate kept
+   returning identical text. Default changed to `google/gemini-2.5-flash`.
+2. **Fallback error was hidden.** The UI banner just said "AI was
+   unavailable — showing a template draft." `AmplifyEditor.tsx` now
+   renders `metadata_json.error` under the banner, and
+   `amplifyService.ts` includes the response body on non-ok OpenRouter
+   responses. That's how we caught the next issue:
+
+### 13g. OpenRouter provider allowlist (user-side config, not code)
+
+After the model fix, regenerate returned:
+`OpenRouter 404: {"error":"No allowed providers are available for the
+selected model","metadata":{"available_providers":["amazon-bedrock",
+"google-vertex"],"requested_providers":["groq","z-ai","openai",
+"perplexity","moonshotai","google-ai-studio"]}}`
+
+Means the user's OpenRouter account has a provider allowlist that
+excludes Anthropic + Bedrock + Vertex. Claude models won't route
+until they enable those providers in OpenRouter settings. Workaround:
+set `OPENROUTER_MODEL=google/gemini-2.5-flash` (google-ai-studio) or
+`openai/gpt-4o-mini` — both route through already-allowed providers.
+User confirmed working with Gemini 2.5 Flash.
+
+### Commits
+
+- `f6625e1` — worker offer popup `router.refresh()` fix
+- Jobs module commit (delete `vercel.json`, new `/jobs` page +
+  runner + API route, sidebar nav)
+- Mobile AppShell commit (AppShell + Sidebar collapse + dashboard
+  padding)
+- Directory modal commit (centering + mobile number field)
+- Amplify campaign tones commit (service rewrite + editor optgroups
+  + API tone allowlist)
+- `bcbf630` — API tone allowlist fix ("Invalid tone" 400)
+- `edf61c8` — migration 005 (tone CHECK constraint)
+- `c51e11f` — default model change + surface OpenRouter error
+
+### Still pending after this session
+
+- Mobile-responsive pass on `/tickets`, `/triage`, `/workers` tables —
+  they render but overflow horizontally; consider card-view at `<md`.
+- Central-support manual-assign warning when re-offering a ticket to
+  a worker who previously rejected it.
+- Everything from §7 low-priority still stands (Reports, attachment
+  download, tests).
+- Clerk sign-in → `users` row bootstrap (§7 item 8) is still deferred;
+  seeded accounts are being used for demos.
