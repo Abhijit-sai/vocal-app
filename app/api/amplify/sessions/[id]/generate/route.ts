@@ -16,7 +16,11 @@ import { generateAmplifyContent, PLATFORMS, type AmplifyPlatform, type AmplifyTo
 
 const ALLOWED_ROLES = ['super_admin', 'central_support']
 const PLATFORM_KEYS = new Set(PLATFORMS.map(p => p.key))
-const TONES: AmplifyTone[] = ['informative', 'urgent', 'formal', 'empathetic', 'neutral']
+const TONES: AmplifyTone[] = [
+  'informative', 'urgent', 'formal', 'empathetic', 'neutral',
+  // Campaign / escalation tones — must match AmplifyTone in amplifyService.
+  'activist', 'opposition', 'public_shame',
+]
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth()
