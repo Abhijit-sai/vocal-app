@@ -649,6 +649,11 @@ export function WorkerQueue({ workerId, offered, activeTickets }: Props) {
           lastAlertedIdRef.current = offer.assignment_id
           setAlertOpen(true)
           playBeep()
+          // Also re-fetch the server-rendered page so the OfferedCard below
+          // the modal is populated with the live offer. Without this, the
+          // user dismisses the modal and sees an empty "No pending offer"
+          // state because SSR was captured before the poll discovered it.
+          startTransition(() => router.refresh())
           try {
             if ('Notification' in window && Notification.permission === 'granted') {
               const t = offer.ticket
@@ -699,7 +704,7 @@ export function WorkerQueue({ workerId, offered, activeTickets }: Props) {
       {alertOpen && polledOffer && (
         <OfferAlertModal
           offer={polledOffer}
-          onDismiss={() => setAlertOpen(false)}
+          onDismiss={() => { setAlertOpen(false); refresh() }}
           onAccept={modalAccept}
           onReject={modalReject}
         />
