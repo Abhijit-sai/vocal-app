@@ -41,12 +41,15 @@ interface Props {
   platforms: PlatformMeta[]
 }
 
-const TONES: { value: AmplifyTone; label: string }[] = [
-  { value: 'informative', label: 'Informative' },
-  { value: 'urgent',      label: 'Urgent' },
-  { value: 'formal',      label: 'Formal' },
-  { value: 'empathetic',  label: 'Empathetic' },
-  { value: 'neutral',     label: 'Neutral' },
+const TONES: { value: AmplifyTone; label: string; group: 'neutral' | 'campaign' }[] = [
+  { value: 'informative',    label: 'Informative',              group: 'neutral'  },
+  { value: 'urgent',         label: 'Urgent',                   group: 'neutral'  },
+  { value: 'formal',         label: 'Formal',                   group: 'neutral'  },
+  { value: 'empathetic',     label: 'Empathetic',               group: 'neutral'  },
+  { value: 'neutral',        label: 'Neutral',                  group: 'neutral'  },
+  { value: 'activist',       label: 'Activist — campaign push', group: 'campaign' },
+  { value: 'opposition',     label: 'Opposition — accountability', group: 'campaign' },
+  { value: 'public_shame',   label: 'Public shame — viral hook',group: 'campaign' },
 ]
 
 export function AmplifyEditor({
@@ -175,8 +178,23 @@ export function AmplifyEditor({
             className="w-full py-1.5 px-2 rounded text-xs border"
             style={{ borderColor: 'var(--canvas-border)', background: 'white', color: 'var(--canvas-text)' }}
           >
-            {TONES.map(t => (<option key={t.value} value={t.value}>{t.label}</option>))}
+            <optgroup label="Neutral / factual">
+              {TONES.filter(t => t.group === 'neutral').map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Campaign / escalation">
+              {TONES.filter(t => t.group === 'campaign').map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </optgroup>
           </select>
+          {(tone === 'activist' || tone === 'opposition' || tone === 'public_shame') && (
+            <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--canvas-text-dim)' }}>
+              Campaign voice — sharper, visibility-seeking language with <code>[@Handle]</code>
+              placeholders. Review before posting; only facts in the source are used.
+            </p>
+          )}
         </section>
       </aside>
 

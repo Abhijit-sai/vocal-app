@@ -24,7 +24,23 @@ export type AmplifyPlatform =
   | 'letter_to_authority'    // Formal letter to concerned authority
   | 'press_release'          // PR-style release
 
-export type AmplifyTone = 'informative' | 'urgent' | 'formal' | 'empathetic' | 'neutral'
+export type AmplifyTone =
+  | 'informative'     // calm, factual explainer
+  | 'urgent'          // time-pressured call for response
+  | 'formal'          // official correspondence voice
+  | 'empathetic'      // human-interest, citizen-first framing
+  | 'neutral'         // reportage voice, no colour
+  // --- Campaign / escalation tones ------------------------------------
+  // Used when central support wants to create visibility pressure.
+  // Still bound by "no unverified accusations, name only what's in the
+  // source, qualify opinion with phrases like 'appears to', 'raises the
+  // question', etc." — the system prompt enforces this.
+  | 'activist'        // sharp civic-campaign voice, moral urgency,
+                      //   names institutional failure, strong CTA
+  | 'opposition'      // political-accountability frame, asks
+                      //   pointed questions of the ruling authority
+  | 'public_shame'    // viral-ready "why is this still happening"
+                      //   voice, designed to surface on feeds
 
 export interface PlatformMeta {
   key: AmplifyPlatform
@@ -43,24 +59,179 @@ export const PLATFORMS: PlatformMeta[] = [
   { key: 'press_release',      label: 'Press Release',       short_hint: 'FOR IMMEDIATE RELEASE header, dateline, body, boilerplate.' },
 ]
 
+// Voice shaping for the campaign/escalation tones. These bias the writer
+// toward post-ready, visibility-maximising output while keeping the
+// organization legally safe: no unverified accusations, qualify opinion
+// with "appears to", "raises the question", etc.
+function toneGuidance(tone: AmplifyTone): string {
+  switch (tone) {
+    case 'activist':
+      return (
+        'Voice: sharp, civic-campaign. Foreground the human impact and the ' +
+        'institutional failure implied by the source. Use moral urgency ' +
+        '("this is unacceptable", "citizens deserve better"). End with a ' +
+        'clear, specific CTA ("tag @[ministry], share, demand an answer"). ' +
+        'You MAY use strong language, but never assert a specific person is ' +
+        'corrupt/criminal/lying unless the source explicitly proves it. ' +
+        'Prefer "appears to", "has failed to", "raises the question of".'
+      )
+    case 'opposition':
+      return (
+        'Voice: political-accountability. Frame the issue as a question the ' +
+        'ruling authority (state or central government, as appropriate to ' +
+        'the source) owes citizens an answer for. Use rhetorical questions ' +
+        '("Why is this still the case after X years?", "Where are the funds ' +
+        'allocated under Y scheme?"). Tag with placeholders like [@CMO] ' +
+        '[@Minister] [@DeptHandle] so the operator can fill in handles ' +
+        'before posting. Never name a politician as guilty of a crime ' +
+        'unless the source explicitly says so. Pointed but litigation-safe.'
+      )
+    case 'public_shame':
+      return (
+        'Voice: viral-ready civic callout designed for the algorithm. Lead ' +
+        'with a single punchy hook line (a shocking fact or stat from the ' +
+        'source). Use short, scannable lines. Name the district / ward / ' +
+        'official title (not personal name unless in source) responsible. ' +
+        'End with a "how many more?" or "tag someone who can fix this" ' +
+        'CTA. Strong emotional register but facts-only; qualify opinion.'
+      )
+    case 'urgent':
+      return 'Voice: time-pressured. Lead with a deadline or the consequence of delay. Action-oriented verbs.'
+    case 'formal':
+      return 'Voice: official correspondence. Neutral register, full sentences, no contractions or emoji.'
+    case 'empathetic':
+      return 'Voice: human-first. Centre the lived experience of the citizen. Warm but precise.'
+    case 'neutral':
+      return 'Voice: reportage. State what the source contains without commentary. No emotive language.'
+    case 'informative':
+    default:
+      return 'Voice: calm explainer. Clear, factual, accessible language. Brief context for readers who don\'t know the issue.'
+  }
+}
+
+// True for tones where the operator is campaigning / applying pressure.
+// These unlock stronger hooks, @-mention placeholders, hashtag stacks.
+function isCampaignTone(tone: AmplifyTone): boolean {
+  return tone === 'activist' || tone === 'opposition' || tone === 'public_shame'
+}
+
 function systemPromptFor(platform: AmplifyPlatform, tone: AmplifyTone): string {
-  const base = `You are drafting public-facing civic-advocacy content for a legitimate citizen-grievance organization. Be factual, non-inflammatory, and never invent details. Output plain text only — no JSON, no preamble, no markdown fences. Never use the word "Disclaimer:".`
-  const toneLine = `Tone: ${tone}.`
+  const campaign = isCampaignTone(tone)
+
+  // Base rules — these never bend.
+  const base =
+    `You are a civic-communications writer drafting post-ready content for a legitimate ` +
+    `citizen-grievance organisation in India. Your output will be published as-is after a quick ` +
+    `human review, so it must be immediately usable — no placeholder like "[insert detail]" unless ` +
+    `the template specifically calls for one, no meta-commentary, no "here is your draft" preamble, ` +
+    `no markdown code fences, no word "Disclaimer". Output plain text only.\n\n` +
+    `Legal safety (non-negotiable):\n` +
+    `  • Never assert a specific person is guilty of a crime, corruption, or dishonesty unless the ` +
+    `source material explicitly establishes it.\n` +
+    `  • Qualify inference with "appears to", "raises the question", "has so far failed to", etc.\n` +
+    `  • Only use facts present in the source. Never invent statistics, dates, names, or quotes.\n` +
+    `  • If the source is thin, lean on the impact on citizens rather than manufacturing detail.\n` +
+    `  • For @-mentions, use placeholder handles in square brackets ([@CMO], [@DeptHandle]) — the ` +
+    `    operator will replace these. Never guess real handles.\n`
+
+  const toneLine = toneGuidance(tone)
+
+  // Platform-specific structural rules.
   switch (platform) {
     case 'tweet':
-      return `${base}\n${toneLine}\nWrite ONE tweet under 280 characters. Include 2–3 relevant hashtags at the end. No @-mentions unless supplied in the source. No links.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: Twitter / X. Write ONE post, strictly ≤ 280 characters including hashtags and ` +
+        `mention placeholders. Structure:\n` +
+        `  1. Hook line (≤ 80 chars) that would make someone stop scrolling.\n` +
+        `  2. One fact from the source (location + the problem).\n` +
+        `  3. ${campaign ? 'A pointed ask / tag: "Tag [@Handle] and demand a response."' : 'A short call to read or share.'}\n` +
+        `  4. 2–3 relevant hashtags at the end. For Indian civic issues, prefer #CitizensDemand, ` +
+        `#FixIt[CityName], #[IssueType] style. Don't invent hashtags that look like they target a ` +
+        `specific person unless the source names them.\n` +
+        `Do NOT include a URL.`
+      )
+
     case 'instagram_caption':
-      return `${base}\n${toneLine}\nWrite an Instagram caption: a hook line, 2–4 short paragraphs, then a block of 6–10 hashtags. Emojis allowed but sparing.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: Instagram caption. Structure:\n` +
+        `  1. Hook line — one punchy opener with an emoji (🚨 / ⚠️ / 🗣️ depending on tone).\n` +
+        `  2. 2–4 short paragraphs (1–2 sentences each), separated by blank lines. Name the place, ` +
+        `    the problem, the human impact.\n` +
+        `  3. Explicit CTA line: ${campaign ? '"Share this. Tag [@Handle]. Demand action."' : '"Share to amplify."'}\n` +
+        `  4. Block of 8–12 hashtags at the very end, no inline hashtags.\n` +
+        `Emojis allowed (max 4 total). Written for a reader scanning on a phone.`
+      )
+
     case 'facebook_post':
-      return `${base}\n${toneLine}\nWrite a Facebook post. Narrative voice, 2–4 short paragraphs. End with a clear ask of the reader (share, sign, report, etc).`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: Facebook post. Structure:\n` +
+        `  1. First line is a complete, shareable sentence — it's the preview on feeds.\n` +
+        `  2. 3–5 short paragraphs. Set the scene, state the problem, name the impact on real ` +
+        `    people. If campaign tone, end the body with a question aimed at the authority ` +
+        `    ("[@Office], when will this be resolved?").\n` +
+        `  3. Closing CTA on its own line: ${campaign ? '"Share if you\'ve had enough. Tag someone who can fix this."' : '"Share to help surface this."'}\n` +
+        `No hashtags unless campaign tone, in which case 2–4 at the very end.`
+      )
+
     case 'whatsapp_broadcast':
-      return `${base}\n${toneLine}\nWrite a WhatsApp broadcast message. Plain text that reads well when forwarded. Short paragraphs. No hashtags. Use *word* for bold only where it clarifies the ask.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: WhatsApp broadcast. Structure:\n` +
+        `  1. Opening line wrapped in *asterisks* — bold summary, one line.\n` +
+        `  2. 2–4 short paragraphs. Forward-friendly (no fancy formatting, no emojis beyond one ` +
+        `    flag/alert icon if tone allows).\n` +
+        `  3. Close with the specific ask: ${campaign ? '"*Forward this to 5 people in your area. Demand action.*"' : '"Forward to anyone who can escalate this."'}\n` +
+        `No hashtags. Use *bold* sparingly (headline + ask only).`
+      )
+
     case 'news_article':
-      return `${base}\n${toneLine}\nWrite a news-article pitch in inverted-pyramid style: a one-line headline, a 25-word lede, then 4–6 short paragraphs with verified details and quotes only if present in the source.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: news-desk pitch in inverted-pyramid style. Structure:\n` +
+        `  HEADLINE: (one punchy line, ≤ 12 words)\n` +
+        `  LEDE: (one 25-word sentence covering who/what/where/when.)\n` +
+        `  BODY: 4–6 short paragraphs. First gives the core facts; next gives context and scale; ` +
+        `  next names the responsible body/official-title; next gives citizen impact. Use a quote ` +
+        `  placeholder "[Quote from affected resident — to be filled]" only if the source doesn't ` +
+        `  already have one.\n` +
+        `  END: one-line "The [authority] has not yet responded to requests for comment." line if ` +
+        `  the source doesn't already establish a response.`
+      )
+
     case 'letter_to_authority':
-      return `${base}\n${toneLine}\nDraft a formal letter to the concerned authority. Include: date placeholder [Date], recipient placeholder [Authority Name & Designation], subject line, salutation, 3–5 paragraphs of factual grievance + request for action, closing, sign-off placeholder [Name & Contact]. Use formal English throughout.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: formal letter to concerned authority. Structure exactly:\n` +
+        `  [Date]\n\n  To,\n  [Authority Name & Designation]\n  [Department / Office]\n\n` +
+        `  Subject: <one clear subject line naming the issue and location>\n\n` +
+        `  Dear Sir / Madam,\n\n` +
+        `  Paragraph 1 (2–3 sentences): state the grievance and where it is occurring.\n` +
+        `  Paragraph 2: factual detail from the source — what has happened, since when, who is ` +
+        `  affected.\n` +
+        `  Paragraph 3: prior steps taken (if any), and why escalation to this authority is required.\n` +
+        `  Paragraph 4: specific, numbered asks of the authority (1. inspect, 2. act, 3. respond by ` +
+        `  [reasonable date]).\n` +
+        `  Closing: "We request your prompt intervention in the public interest."\n\n` +
+        `  Sincerely,\n  [Name]\n  [Organisation]\n  [Contact]\n` +
+        `Formal English. No emojis, no contractions.`
+      )
+
     case 'press_release':
-      return `${base}\n${toneLine}\nWrite a press release: "FOR IMMEDIATE RELEASE" line, a dateline ([City, Date] —), a strong lead paragraph, 3–4 body paragraphs, a short quote placeholder, and a one-line boilerplate about the organization.`
+      return (
+        `${base}\n${toneLine}\n\n` +
+        `PLATFORM: press release. Structure exactly:\n` +
+        `  FOR IMMEDIATE RELEASE\n\n  [City, Date] —\n\n` +
+        `  LEAD PARAGRAPH: one strong 30–40-word paragraph naming the issue, where, and why it ` +
+        `  matters now.\n` +
+        `  BODY: 3–4 short paragraphs with the source facts, scale/impact, and the responsible ` +
+        `  authority (by office title, not personal name unless in source).\n` +
+        `  QUOTE: one quote attributed to "[Spokesperson, Vocal]" — one sentence, ${campaign ? 'sharp but litigation-safe' : 'measured'}.\n` +
+        `  BOILERPLATE: one-line "About Vocal" paragraph at the end.\n` +
+        `  CONTACT: "Media contact: [name] · [email] · [phone]" line.`
+      )
   }
 }
 

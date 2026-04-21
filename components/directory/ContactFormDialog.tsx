@@ -89,12 +89,17 @@ export function ContactFormDialog({ mode, initial, triggerLabel, triggerClassNam
 
       {open && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in"
+          className="fixed inset-0 z-40 overflow-y-auto animate-in"
           style={{ background: 'rgba(15, 23, 42, 0.45)' }}
           onClick={() => setOpen(false)}
         >
+          {/* Full-height flex that lets tall forms scroll the whole backdrop
+              instead of clipping inside a fixed-height card. On short
+              viewports the modal flows from the top; on tall ones it's
+              vertically centered. */}
+          <div className="min-h-full flex items-center justify-center p-4">
           <div
-            className="card w-full max-w-lg max-h-[92vh] overflow-auto"
+            className="card w-full max-w-lg my-auto"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -132,7 +137,7 @@ export function ContactFormDialog({ mode, initial, triggerLabel, triggerClassNam
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Organization">
                   <input
                     name="organization_name"
@@ -153,21 +158,28 @@ export function ContactFormDialog({ mode, initial, triggerLabel, triggerClassNam
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Phone">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Mobile number">
                   <input
                     name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     maxLength={40}
                     defaultValue={initial?.phone ?? ''}
+                    placeholder="e.g. +91 98xxxxxxxx"
                     className="w-full text-sm px-3 py-2 rounded-md border outline-none focus:ring-2"
                     style={inputStyle}
                   />
                 </Field>
-                <Field label="Alt Phone">
+                <Field label="Alternate phone">
                   <input
                     name="phone_alternate"
+                    type="tel"
+                    inputMode="tel"
                     maxLength={40}
                     defaultValue={initial?.phone_alternate ?? ''}
+                    placeholder="Optional landline / alt mobile"
                     className="w-full text-sm px-3 py-2 rounded-md border outline-none focus:ring-2"
                     style={inputStyle}
                   />
@@ -252,6 +264,7 @@ export function ContactFormDialog({ mode, initial, triggerLabel, triggerClassNam
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}
