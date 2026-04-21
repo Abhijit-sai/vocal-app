@@ -265,6 +265,11 @@ export function AmplifyEditor({
               style={{ background: 'var(--alert-warning-bg)', color: 'var(--alert-warning-text)' }}
             >
               AI was unavailable — showing a template draft. Regenerate once AI is reachable.
+              {(currentDraft as any).metadata_json?.error && (
+                <div className="mt-1 font-mono opacity-80 break-all">
+                  {String((currentDraft as any).metadata_json.error)}
+                </div>
+              )}
             </div>
           )}
 

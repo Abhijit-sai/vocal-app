@@ -13,7 +13,10 @@
 
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1'
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? ''
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash-preview'
+// Default to a current GA model. `google/gemini-2.5-flash-preview` 404s on
+// OpenRouter now that preview aliases were retired — override via
+// OPENROUTER_MODEL env if you want a specific model.
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash'
 
 export type AmplifyPlatform =
   | 'tweet'                  // X/Twitter — single tweet or short thread
@@ -288,7 +291,10 @@ export async function generateAmplifyContent(args: GenerateArgs): Promise<Genera
       }),
       signal: AbortSignal.timeout(20_000),
     })
-    if (!res.ok) throw new Error(`OpenRouter ${res.status}`)
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 300)}`)
+    }
     const data = await res.json()
     const content = (data.choices?.[0]?.message?.content ?? '').trim()
     if (!content) throw new Error('Empty AI response')
