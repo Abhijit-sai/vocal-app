@@ -492,27 +492,9 @@ function ActiveCard({ ticket, onChanged }: { ticket: ActiveTicket; onChanged: ()
   )
 }
 
-// ─── New-offer alert (beep + browser notification + modal) ──────────────────
-// Plays a short Web Audio beep — no asset files needed.
-function playBeep() {
-  try {
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
-    if (!AC) return
-    const ctx = new AC()
-    const o = ctx.createOscillator()
-    const g = ctx.createGain()
-    o.type = 'sine'
-    o.frequency.setValueAtTime(880, ctx.currentTime)
-    g.gain.setValueAtTime(0.0001, ctx.currentTime)
-    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02)
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.55)
-    o.connect(g); g.connect(ctx.destination)
-    o.start()
-    o.stop(ctx.currentTime + 0.6)
-    // Close context shortly after so we don't accumulate audio graphs.
-    setTimeout(() => ctx.close().catch(() => {}), 900)
-  } catch { /* audio blocked; silent fallback */ }
-}
+// ─── New-offer alert (modal + browser notification) ─────────────────────────
+// NOTE: Sound is handled globally by <WorkerAlertSubscriber />. This
+// component only owns the visual modal so we avoid double-beeping.
 
 type PolledOffer = {
   assignment_id: string
@@ -658,7 +640,7 @@ export function WorkerQueue({ workerId, offered, activeTickets }: Props) {
         if (offer && offer.assignment_id !== lastAlertedIdRef.current) {
           lastAlertedIdRef.current = offer.assignment_id
           setAlertOpen(true)
-          playBeep()
+          // Sound is played by <WorkerAlertSubscriber/> mounted in AppShell.
           // Also re-fetch the server-rendered page so the OfferedCard below
           // the modal is populated with the live offer. Without this, the
           // user dismisses the modal and sees an empty "No pending offer"
