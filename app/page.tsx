@@ -3,11 +3,11 @@ import Image from 'next/image'
 import { QRCard } from '@/components/landing/QRCard'
 
 const TELEGRAM_URL = 'https://t.me/Bevocal_bot'
-const LOGIN_URL = 'https://vocal-app-one.vercel.app/sign-in'
+const LOGIN_URL = '/sign-in'
 const CONTACT_EMAIL = 'mailto:hello@bevocal.in'
 
 export const metadata: Metadata = {
-  title: 'Be Vocal — Your Voice, Straight to Your Leader',
+  title: 'My Leader — Your Voice, Straight to Your Leader',
   description:
     'Report civic issues directly to your MLA. No middlemen, no filters. Real on-ground intelligence for leaders and workers across AP & Telangana.',
 }
@@ -89,8 +89,8 @@ export default function LandingPage() {
       <header className="lp-nav">
         <div className="lp-container">
           <div className="lp-nav-inner">
-            <a href="/" aria-label="Be Vocal home" className="lp-nav-logo">
-              <Image src="/logo.svg" alt="Be Vocal" width={160} height={40} priority style={{ height: '36px', width: 'auto' }} />
+            <a href="/" aria-label="My Leader home" className="lp-nav-logo">
+              <Image src="/logo.svg" alt="My Leader" width={160} height={40} priority style={{ height: '36px', width: 'auto' }} />
             </a>
             <nav aria-label="Main navigation" className="lp-nav-links">
               <a href="#citizens" className="lp-nav-link">For Citizens</a>
@@ -120,7 +120,7 @@ export default function LandingPage() {
                 No filters.
               </h1>
               <p className="lp-hero-sub">
-                Be Vocal connects citizens directly to their elected representative — bypassing media spin and worker bias. Report a real problem. Get real action.
+                My Leader connects citizens directly to their elected representative — bypassing media spin and worker bias. Report a real problem. Get real action.
               </p>
               <div className="lp-hero-ctas">
                 <a href="#citizens" className="lp-btn-red lp-btn-lg">
@@ -210,7 +210,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <div className="lp-coming-soon-header">
-                  <div className="lp-card-label" style={{ color: '#9CA3AF' }}>Be Vocal App</div>
+                  <div className="lp-card-label" style={{ color: '#9CA3AF' }}>My Leader App</div>
                   <span className="lp-badge-soon">Coming Soon</span>
                 </div>
                 <p className="lp-card-body-text" style={{ color: '#6B7280' }}>
@@ -315,7 +315,7 @@ export default function LandingPage() {
               {
                 step: '01',
                 title: 'Citizen Sends a Message',
-                body: 'Open Telegram, start a chat with Be Vocal. Send your grievance in text, photo, or audio — in Telugu or English. No forms. No queues.',
+                body: 'Open Telegram, start a chat with My Leader. Send your grievance in text, photo, or audio — in Telugu or English. No forms. No queues.',
                 imgSrc: '/images/ground-reality.png',
                 imgAlt: 'Residents standing on a waterlogged street in AP/Telangana — a real civic issue',
               },
@@ -364,7 +364,7 @@ export default function LandingPage() {
           </p>
           <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className="lp-btn-white-on-red">
             <IconTelegram />
-            Open Be Vocal on Telegram
+            Open My Leader on Telegram
           </a>
         </div>
       </section>
@@ -374,7 +374,7 @@ export default function LandingPage() {
         <div className="lp-container">
           <div className="lp-footer-grid">
             <div>
-              <Image src="/logo.svg" alt="Be Vocal" width={140} height={36} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', marginBottom: '12px' }} />
+              <Image src="/logo.svg" alt="My Leader" width={140} height={36} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', marginBottom: '12px' }} />
               <p className="lp-footer-tagline">
                 A civic issue platform for one organization at a time.<br />Built for AP &amp; Telangana.
               </p>
@@ -395,7 +395,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="lp-footer-bottom">
-            <p>© 2026 Be Vocal. All rights reserved.</p>
+            <p>© 2026 My Leader. All rights reserved.</p>
             <p>Made for the people of AP &amp; Telangana.</p>
           </div>
         </div>

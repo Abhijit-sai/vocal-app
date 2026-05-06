@@ -231,8 +231,8 @@ function systemPromptFor(platform: AmplifyPlatform, tone: AmplifyTone): string {
         `  matters now.\n` +
         `  BODY: 3–4 short paragraphs with the source facts, scale/impact, and the responsible ` +
         `  authority (by office title, not personal name unless in source).\n` +
-        `  QUOTE: one quote attributed to "[Spokesperson, Vocal]" — one sentence, ${campaign ? 'sharp but litigation-safe' : 'measured'}.\n` +
-        `  BOILERPLATE: one-line "About Vocal" paragraph at the end.\n` +
+        `  QUOTE: one quote attributed to "[Spokesperson, My Leader]" — one sentence, ${campaign ? 'sharp but litigation-safe' : 'measured'}.\n` +
+        `  BOILERPLATE: one-line "About My Leader" paragraph at the end.\n` +
         `  CONTACT: "Media contact: [name] · [email] · [phone]" line.`
       )
   }
@@ -278,7 +278,7 @@ export async function generateAmplifyContent(args: GenerateArgs): Promise<Genera
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://vocal-app.vercel.app',
-        'X-Title': 'Vocal Amplify',
+        'X-Title': 'My Leader Amplify',
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
@@ -314,7 +314,7 @@ function fallbackDraft(args: GenerateArgs, sources: string): string {
   const summary = sources.slice(0, 500)
   switch (args.platform) {
     case 'tweet':
-      return `${tag}\n\nCitizens are raising a serious concern that needs urgent attention. Read below and share.\n#Accountability #Vocal`
+      return `${tag}\n\nCitizens are raising a serious concern that needs urgent attention. Read below and share.\n#Accountability #MyLeader`
     case 'instagram_caption':
     case 'facebook_post':
       return `${tag}\n\nA citizen has reported an issue requiring attention:\n\n${summary}\n\nWe've filed this and are tracking progress. Please share to amplify.`
@@ -325,6 +325,6 @@ function fallbackDraft(args: GenerateArgs, sources: string): string {
     case 'letter_to_authority':
       return `${tag}\n\n[Date]\n\nTo,\n[Authority Name & Designation]\n\nSubject: Citizen grievance requiring immediate action\n\nDear Sir/Madam,\n\n${summary}\n\nWe request your prompt intervention.\n\nSincerely,\n[Name & Contact]`
     case 'press_release':
-      return `${tag}\n\nFOR IMMEDIATE RELEASE\n\n[City, Date] — Vocal has today surfaced a citizen grievance requiring official attention.\n\n${summary}`
+      return `${tag}\n\nFOR IMMEDIATE RELEASE\n\n[City, Date] — My Leader has today surfaced a citizen grievance requiring official attention.\n\n${summary}`
   }
 }

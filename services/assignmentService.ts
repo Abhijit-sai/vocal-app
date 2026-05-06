@@ -16,6 +16,7 @@
 
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { notifyCitizenOfTicketUpdate } from './citizenNotifier'
+import { notifyWorkerOfAssignment } from './workerNotifier'
 
 const GROUND_WORKER_ROLE_ID = '00000000-0000-0000-0000-000000000005'
 
@@ -282,6 +283,8 @@ export async function offerTicketToWorker(args: {
     workerUserId: args.workerId,
     key: 'assigned_awaiting_acceptance',
   }).catch(() => {})
+
+  notifyWorkerOfAssignment(args.ticketId, args.workerId).catch(() => {})
 
   return { ok: true, assignmentId: assignment.id, expiresAt }
 }

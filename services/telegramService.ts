@@ -94,15 +94,15 @@ export async function clearInlineKeyboard(
 
 export const BOT = {
   welcome: () =>
-`👋 *Hi, I'm Vocal's assistant.*
+`👋 *Hi, I'm the My Leader assistant.*
 I help you report civic issues to your local organization.
 
 *Tap a button below to get started.*
 You can send /cancel at any time to stop.`,
 
   help: () =>
-`*About Vocal*
-Vocal collects civic issues from citizens and routes them to people who can help.
+`*About My Leader*
+My Leader collects civic issues from citizens and routes them to people who can help.
 
 I can help you with just two things:
 1. Filing a new issue — I'll ask a few quick questions.

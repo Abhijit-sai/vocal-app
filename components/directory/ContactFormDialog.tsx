@@ -89,7 +89,7 @@ export function ContactFormDialog({ mode, initial, triggerLabel, triggerClassNam
 
       {open && (
         <div
-          className="fixed inset-0 z-40 overflow-y-auto animate-in"
+          className="fixed inset-0 z-[9999] overflow-y-auto animate-in"
           style={{ background: 'rgba(15, 23, 42, 0.45)' }}
           onClick={() => setOpen(false)}
         >

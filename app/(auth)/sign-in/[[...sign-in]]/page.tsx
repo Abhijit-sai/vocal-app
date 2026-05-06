@@ -17,11 +17,11 @@ export default function SignInPage() {
               boxShadow: 'var(--shadow-md)',
             }}
           >
-            V
+            M
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--canvas-text)' }}>
-              Sign in to Vocal
+              Sign in to My Leader
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--canvas-muted)' }}>
               Civic issue management platform
@@ -29,7 +29,7 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <SignIn />
+        <SignIn forceRedirectUrl="/dashboard" />
 
         <p className="text-xs text-center" style={{ color: 'var(--canvas-muted)' }}>
           New organization?{' '}

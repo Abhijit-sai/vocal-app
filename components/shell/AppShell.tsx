@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react'
 import { Sidebar } from './Sidebar'
+import { WorkerAlertSubscriber } from './WorkerAlertSubscriber'
 import type { RoleName } from '@/types/database'
 
 const LS_KEY = 'vocal:sidebar-collapsed'
@@ -66,6 +67,9 @@ export function AppShell({ userRole, orgName, userName, children }: Props) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Alert sound subscriber — only for ground workers */}
+      {userRole === 'ground_worker' && <WorkerAlertSubscriber />}
+
       {/* Desktop sidebar — always mounted ≥ md; hidden < md. */}
       <div className="hidden md:flex h-full">
         <Sidebar
@@ -171,11 +175,11 @@ function TopBar({
           className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[11px] text-white flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, var(--brand-500) 0%, var(--brand-700) 100%)' }}
         >
-          V
+          M
         </div>
         <div className="min-w-0">
           <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--shell-text)' }}>
-            Vocal
+            My Leader
           </div>
           <div className="text-[10px] truncate -mt-0.5" style={{ color: 'var(--shell-muted)' }}>
             {orgName}

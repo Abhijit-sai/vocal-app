@@ -212,12 +212,12 @@ export function Sidebar({ userRole, orgName, userName, collapsed = false, onNavi
             boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
           }}
         >
-          V
+          M
         </div>
         {!collapsed && (
           <div className="min-w-0">
             <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--shell-text)' }}>
-              Vocal
+              My Leader
             </div>
             <div className="text-[11px] truncate" style={{ color: 'var(--shell-muted)' }}>
               {orgName}

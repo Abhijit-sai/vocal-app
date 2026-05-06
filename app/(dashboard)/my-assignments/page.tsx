@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentVocalUser, createSupabaseServiceClient } from '@/lib/supabase/server'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { WorkerQueue } from '@/components/workers/WorkerQueue'
+import { TelegramLinkBanner } from '@/components/workers/TelegramLinkBanner'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,12 +41,30 @@ export default async function MyAssignmentsPage() {
     .select(`
       id, ticket_number, title, original_issue_text,
       location_text, severity, stage, sub_status,
-      accepted_at, sla_first_contact_due_at, sla_resolution_due_at
+      accepted_at, sla_first_contact_due_at, sla_resolution_due_at,
+      citizen_id, citizen_identity_revealed_at
     `)
     .eq('owner_user_id', user.id)
     .eq('stage', 'in_progress')
     .neq('sub_status', 'assigned_awaiting_acceptance')
     .order('accepted_at', { ascending: true })
+
+  // Batch-fetch citizen phones for tickets where identity has been revealed
+  const revealedCitizenIds = (activeRaw ?? [])
+    .filter(t => t.citizen_id && t.citizen_identity_revealed_at)
+    .map(t => t.citizen_id as string)
+
+  const citizenPhoneMap: Record<string, string | null> = {}
+  if (revealedCitizenIds.length > 0) {
+    const { data: identities } = await supabase
+      .from('citizen_channel_identities')
+      .select('citizen_id, phone')
+      .in('citizen_id', revealedCitizenIds)
+      .not('phone', 'is', null)
+    for (const row of identities ?? []) {
+      if (!citizenPhoneMap[row.citizen_id]) citizenPhoneMap[row.citizen_id] = row.phone
+    }
+  }
 
   // Normalise Supabase join shapes (can be array or object)
   const offered = offeredRaw
@@ -58,17 +77,24 @@ export default async function MyAssignmentsPage() {
       }
     : null
 
+  const meta = (user as any).metadata_json as Record<string, unknown> | null
+  const telegramLinked = typeof meta?.telegram_chat_id === 'number'
+
   return (
     <div>
       <PageHeader
         title="My Assignments"
         subtitle={offered ? '⏳ You have a pending offer — respond before it expires' : 'No pending offer right now'}
       />
-      <div className="p-6 sm:p-8 max-w-3xl mx-auto">
+      <div className="p-6 sm:p-8 max-w-3xl mx-auto space-y-6">
+        <TelegramLinkBanner userId={user.id} linked={telegramLinked} />
         <WorkerQueue
           workerId={user.id}
           offered={offered}
-          activeTickets={activeRaw ?? []}
+          activeTickets={(activeRaw ?? []).map(t => ({
+            ...t,
+            citizen_phone: t.citizen_id ? (citizenPhoneMap[t.citizen_id] ?? null) : null,
+          }))}
         />
       </div>
     </div>

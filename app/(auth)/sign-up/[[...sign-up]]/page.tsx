@@ -17,11 +17,11 @@ export default function SignUpPage() {
               boxShadow: 'var(--shadow-md)',
             }}
           >
-            V
+            M
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--canvas-text)' }}>
-              Create your Vocal account
+              Create your My Leader account
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--canvas-muted)' }}>
               Start managing civic issues in minutes

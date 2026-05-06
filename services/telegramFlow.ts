@@ -36,6 +36,7 @@ import {
 import { classifyIntent } from './aiService'
 import { createTicket } from './ticketService'
 import { generateTicketSuggestions } from './aiService'
+import { findNearestAvailableWorker, offerTicketToWorker } from './assignmentService'
 
 export type Step =
   | 'idle'
@@ -370,6 +371,18 @@ async function fileTicket(ctx: FlowContext) {
 
   // Confirm to citizen.
   await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber), { reply_markup: KB.postTicket() })
+
+  // Auto-assign: fire-and-forget; skips triage queue.
+  findNearestAvailableWorker(result.ticketId).then(async (worker) => {
+    if (worker) {
+      await offerTicketToWorker({
+        ticketId: result.ticketId,
+        workerId: worker.id,
+        assignedByUserId: null,
+        reason: 'Auto-assigned at ticket creation',
+      })
+    }
+  }).catch(() => {})
 
   // Kick off AI enrichment (fire-and-forget).
   if (draft.issue_text) {

@@ -20,6 +20,7 @@ export default async function TicketDetailPage({
 
   const supabase = createSupabaseServiceClient()
   const roleName = (user as any).roles?.name
+  const isPrivileged = ['super_admin', 'central_support'].includes(roleName)
 
   // Fetch ticket with all relations.
   // NOTE: `issue_categories` is referenced twice (category + subcategory),
@@ -47,6 +48,7 @@ export default async function TicketDetailPage({
     { data: history },
     { data: aiSuggestion },
     { data: assignment },
+    { data: citizenIdentity },
   ] = await Promise.all([
     supabase.from('ticket_notes')
       .select('*, users(id, full_name)')
@@ -65,7 +67,26 @@ export default async function TicketDetailPage({
       .select('*, users!ticket_assignments_worker_user_id_fkey(id, full_name)')
       .eq('ticket_id', id).eq('is_current', true)
       .maybeSingle(),
+    // Fetch citizen contact info — only when identity has been revealed OR user is privileged.
+    ticket.citizen_id
+      ? supabase.from('citizen_channel_identities')
+          .select('channel, channel_user_id, username, phone')
+          .eq('citizen_id', ticket.citizen_id)
+          .eq('channel', 'telegram')
+          .order('last_seen_at', { ascending: false })
+          .limit(1).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
+
+  // Workers only see citizen contact after identity is revealed; privileged users see always.
+  const canSeeCitizenContact =
+    isPrivileged ||
+    (roleName === 'ground_worker' && !!(ticket as any).citizen_identity_revealed_at)
+
+  const citizenPhone: string | null = canSeeCitizenContact ? (citizenIdentity?.phone ?? null) : null
+  const citizenHandle: string | null = canSeeCitizenContact
+    ? (citizenIdentity?.username ? `@${citizenIdentity.username}` : null)
+    : null
 
   // Workers list for assignment (central support only)
   let workers: any[] = []
@@ -78,8 +99,6 @@ export default async function TicketDetailPage({
       .eq('active', true)
     workers = w ?? []
   }
-
-  const isPrivileged = ['super_admin', 'central_support'].includes(roleName)
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--canvas-bg)' }}>
@@ -197,6 +216,55 @@ export default async function TicketDetailPage({
                 </div>
               )}
             </section>
+
+            {/* Citizen contact — shown to workers after acceptance, always to privileged roles */}
+            {canSeeCitizenContact && (citizenPhone || citizenHandle) && (
+              <section
+                className="card p-5"
+                style={{ borderLeft: '3px solid #10b981' }}
+              >
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-3"
+                    style={{ color: 'var(--canvas-muted)' }}>
+                  Citizen Contact
+                </h2>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  {citizenPhone && (
+                    <a
+                      href={`tel:${citizenPhone}`}
+                      className="flex items-center gap-2 font-medium"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92v2z"/>
+                      </svg>
+                      {citizenPhone}
+                    </a>
+                  )}
+                  {citizenHandle && (
+                    <span className="flex items-center gap-2" style={{ color: 'var(--canvas-text-dim)' }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 14.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/>
+                      </svg>
+                      {citizenHandle}
+                    </span>
+                  )}
+                </div>
+                {!ticket.anonymous_flag && !(ticket as any).citizen_identity_revealed_at && roleName === 'ground_worker' && (
+                  <p className="mt-2 text-xs" style={{ color: 'var(--canvas-muted)' }}>
+                    Accept the ticket to reveal citizen contact details.
+                  </p>
+                )}
+              </section>
+            )}
+
+            {/* Prompt for workers who haven't accepted yet */}
+            {roleName === 'ground_worker' && !ticket.anonymous_flag && !(ticket as any).citizen_identity_revealed_at && !citizenPhone && !citizenHandle && (
+              <section className="card p-4" style={{ borderLeft: '3px solid #f59e0b' }}>
+                <p className="text-sm" style={{ color: 'var(--canvas-muted)' }}>
+                  📞 Citizen contact details will appear here after you accept this ticket.
+                </p>
+              </section>
+            )}
 
             {/* Classification grid */}
             <section className="card p-5">

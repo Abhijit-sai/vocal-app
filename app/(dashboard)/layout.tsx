@@ -46,7 +46,7 @@ export default async function DashboardLayout({
   return (
     <AppShell
       userRole={roleName}
-      orgName={(user as any).organizations?.name ?? 'Vocal'}
+      orgName={(user as any).organizations?.name ?? 'My Leader'}
       userName={user.full_name}
     >
       {children}

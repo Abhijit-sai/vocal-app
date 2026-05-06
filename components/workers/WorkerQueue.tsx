@@ -78,6 +78,7 @@ interface ActiveTicket {
   accepted_at: string | null
   sla_first_contact_due_at: string | null
   sla_resolution_due_at: string | null
+  citizen_phone?: string | null
 }
 
 interface Props {
@@ -413,6 +414,15 @@ function ActiveCard({ ticket, onChanged }: { ticket: ActiveTicket; onChanged: ()
               📍 {ticket.location_text}
             </div>
           )}
+          {ticket.citizen_phone && (
+            <a
+              href={`tel:${ticket.citizen_phone}`}
+              className="text-xs mt-0.5 inline-flex items-center gap-1 hover:underline underline-offset-2"
+              style={{ color: 'var(--primary)' }}
+            >
+              📞 {ticket.citizen_phone}
+            </a>
+          )}
         </div>
       </div>
 
@@ -657,7 +667,7 @@ export function WorkerQueue({ workerId, offered, activeTickets }: Props) {
           try {
             if ('Notification' in window && Notification.permission === 'granted') {
               const t = offer.ticket
-              new Notification('New Vocal ticket offered to you', {
+              new Notification('New My Leader ticket offered to you', {
                 body: t?.title ?? t?.original_issue_text?.slice(0, 120) ?? 'Tap to review',
                 tag:  `offer-${offer.assignment_id}`,
               })

@@ -3,10 +3,11 @@ import { NextResponse } from 'next/server'
 
 // Public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
-  '/',                            // landing page
+  '/',                               // landing page
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/webhooks/telegram(.*)',   // Telegram webhook must be public
+  '/api/webhooks/telegram(.*)',      // citizen bot webhook
+  '/api/webhooks/telegram-worker(.*)', // worker bot webhook
   '/api/webhooks/telegram-test(.*)',
 ])
 

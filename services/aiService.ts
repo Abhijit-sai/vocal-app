@@ -126,7 +126,7 @@ Rules:
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://vocal-app.vercel.app',
-        'X-Title': 'Vocal Civic Platform',
+        'X-Title': 'My Leader Civic Platform',
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
@@ -215,7 +215,7 @@ Categories: ${ISSUE_CATEGORIES.join(', ')}`
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://vocal-app.vercel.app',
-        'X-Title': 'Vocal Civic Platform',
+        'X-Title': 'My Leader Civic Platform',
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,

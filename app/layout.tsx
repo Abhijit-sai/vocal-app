@@ -3,7 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Vocal – Civic Issue Platform',
+  title: 'My Leader – Civic Issue Platform',
   description: 'Intake, track, assign, and resolve citizen issues.',
 }
 
