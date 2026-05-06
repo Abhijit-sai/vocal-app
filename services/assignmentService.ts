@@ -16,7 +16,7 @@
 
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { notifyCitizenOfTicketUpdate } from './citizenNotifier'
-import { notifyWorkerOfAssignment } from './workerNotifier'
+import { notifyWorkerOfAssignment, notifyWorkerOfReassignment } from './workerNotifier'
 
 const GROUND_WORKER_ROLE_ID = '00000000-0000-0000-0000-000000000005'
 
@@ -201,7 +201,7 @@ export async function offerTicketToWorker(args: {
 
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, organization_id, stage, sub_status, offered_worker_ids')
+    .select('id, organization_id, stage, sub_status, offered_worker_ids, assignment_attempt_count')
     .eq('id', args.ticketId)
     .single()
   if (!ticket) return { ok: false, error: 'ticket_not_found' }
@@ -275,6 +275,7 @@ export async function offerTicketToWorker(args: {
     },
   })
 
+  // Citizen notification is non-critical — fire-and-forget is fine here.
   notifyCitizenOfTicketUpdate({
     ticketId: args.ticketId,
     prevSubStatus: ticket.sub_status as any,
@@ -284,7 +285,10 @@ export async function offerTicketToWorker(args: {
     key: 'assigned_awaiting_acceptance',
   }).catch(() => {})
 
-  notifyWorkerOfAssignment(args.ticketId, args.workerId).catch(() => {})
+  // CRITICAL: await the worker notification so serverless functions don't
+  // terminate the in-flight Telegram POST when the parent function returns.
+  // notifyWorkerOfAssignment swallows its own errors, so awaiting is safe.
+  await notifyWorkerOfAssignment(args.ticketId, args.workerId)
 
   return { ok: true, assignmentId: assignment.id, expiresAt }
 }
@@ -333,10 +337,17 @@ export async function expireStaleAssignments(): Promise<{
 
     const { data: ticket } = await supabase
       .from('tickets')
-      .select('id, organization_id, stage, sub_status, assignment_attempt_count')
+      .select('id, ticket_number, organization_id, stage, sub_status, assignment_attempt_count')
       .eq('id', a.ticket_id)
       .single()
     if (!ticket) continue
+
+    // Tell the worker whose offer just expired that the ticket has moved on,
+    // so their stale Accept/Reject buttons in Telegram aren't a black hole.
+    // Awaited so the serverless function doesn't terminate the in-flight POST.
+    if (a.worker_user_id) {
+      await notifyWorkerOfReassignment(a.worker_user_id, ticket.ticket_number)
+    }
 
     const { data: settings } = await supabase
       .from('organization_settings')

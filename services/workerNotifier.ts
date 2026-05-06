@@ -139,6 +139,28 @@ export async function notifyWorkerOfAssignment(
   }
 }
 
+// ── Re-assignment / expiry notice ──────────────────────────────────────────
+// Tell the worker whose offer just expired (without acceptance) that the
+// ticket has moved on. Without this, their Accept/Reject buttons in Telegram
+// silently stop working and they have no idea what happened.
+export async function notifyWorkerOfReassignment(
+  workerId: string,
+  ticketNumber: string,
+): Promise<void> {
+  try {
+    const chatId = await getWorkerChatId(workerId)
+    if (!chatId) return
+    await sendWorkerMessage(
+      chatId,
+      `⏰ *Offer expired — ${ticketNumber}*\n\n` +
+      `You didn't respond in time, so this ticket has been re-assigned to another team member.\n\n` +
+      `If you'd like to take more tickets, just stay on the *My Leader* app — new offers will appear automatically.`,
+    )
+  } catch {
+    // Swallow — never throw on notification failure
+  }
+}
+
 // ── Daily reminder ─────────────────────────────────────────────────────────
 
 export async function sendWorkerDailyReminders(organizationId: string): Promise<{
