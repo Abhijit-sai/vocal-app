@@ -1,0 +1,21 @@
+{
+  "district": "Rajanna Sircilla",
+  "source": "https://en.wikipedia.org/wiki/Rajanna_Sircilla_district + https://en.wikipedia.org/wiki/Sircilla_Assembly_constituency",
+  "verified_at": "2026-05-13",
+  "note": "AC mapping: 'Sircilla' AC covers 6 mandals (marked sircilla_ac=true). 'Vemulawada' AC covers the rest (Vemulawada Rural division + some Sircilla-division remnants). Verify with TSEC before launch.",
+  "mandals": [
+    { "name": "Sircilla",        "revenue_division": "Sircilla",   "constituency": "Sircilla",   "centroid_lat": 18.387, "centroid_lng": 78.811 },
+    { "name": "Thangallapalli",  "revenue_division": "Sircilla",   "constituency": "Sircilla" },
+    { "name": "Gambhiraopet",    "revenue_division": "Sircilla",   "constituency": "Sircilla" },
+    { "name": "Yellareddipet",   "revenue_division": "Sircilla",   "constituency": "Sircilla" },
+    { "name": "Veernapalli",     "revenue_division": "Sircilla",   "constituency": "Sircilla" },
+    { "name": "Mustabad",        "revenue_division": "Sircilla",   "constituency": "Sircilla" },
+    { "name": "Ellanthakunta",   "revenue_division": "Sircilla",   "constituency": "Vemulawada" },
+    { "name": "Vemulawada",      "revenue_division": "Vemulawada", "constituency": "Vemulawada", "centroid_lat": 18.477, "centroid_lng": 78.866 },
+    { "name": "Vemulawada Rural","revenue_division": "Vemulawada", "constituency": "Vemulawada" },
+    { "name": "Chandurthi",      "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
+    { "name": "Konaraopeta",     "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
+    { "name": "Boinpalli",       "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
+    { "name": "Rudrangi",        "revenue_division": "Vemulawada", "constituency": "Vemulawada" }
+  ]
+}
