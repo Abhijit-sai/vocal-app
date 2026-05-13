@@ -14,50 +14,80 @@ pending work, and important gotchas that are not obvious from the code.
 
 ## 0. Where we left off (resume here)
 
-**Latest session (2026-04-22): Jobs module, responsive shell, Amplify
-campaign tones.** See §13 for the full log. Top things that changed:
+**Latest session (2026-05-06 → 2026-05-13): Major scope pivot + tenant
+config foundation + Telangana Tier A seed.** See §14 for the full log.
+Top things that changed:
 
-- Removed `vercel.json` cron (free tier). Manual **Jobs** page at
-  `/jobs` for central_support / super_admin to trigger
-  `expire-assignments` and see a rolling audit log.
-- Mobile-responsive AppShell with a toggleable sidebar (desktop
-  collapse persisted in localStorage; mobile drawer with backdrop).
-- Directory "add contact" modal centered + added `phone` (mobile) +
-  `phone_alternate` fields; responsive grid.
-- Amplify prompts rewritten for post-ready campaign/escalation
-  content. Three new tones: `activist`, `opposition`, `public_shame`.
-  Migration 005 widens the `amplify_generated_outputs_tone_check`
-  constraint. Default OpenRouter model changed to
-  `google/gemini-2.5-flash` (preview alias was retired and 404'd).
-  Fallback banner now surfaces the raw OpenRouter error so the next
-  provider/model issue is visible from the UI.
-- Worker offer popup: `router.refresh()` on detection + dismiss so
-  "Review in page" no longer leaves an empty offered-card.
+- **Scope pivot:** project rebranded "Vocal/Be Vocal" → **"My Leader"**
+  (platform name kept across tenants). First real client = **JTG party,
+  launching in Sircilla constituency, Telangana**. New product
+  architecture: deploy-time multi-tenancy via `config/tenant.config.ts`
+  — clone the repo, edit one file, ship a new client deployment.
+- **Tenant config foundation shipped** (commit `bcaaa4f`):
+  `config/tenant.config.ts` is the single source of truth for app
+  branding, party identity, brand colors (injected as CSS variables via
+  new `TenantThemeProvider`), bot usernames, geography root, language
+  defaults, civic-scope policy (incl. Telugu polite-decline), and
+  operations email. 13 files refactored to read from it. Zero behavior
+  change for the current demo (verified). Telangana grievance taxonomy
+  saved to `docs/research/`.
+- **Telangana Tier A seed shipped** (commit `3e7f029`): JSON data files
+  for 33 districts + 119 ACs + Sircilla's 13 mandals, plus idempotent
+  `scripts/seed-telangana-tier-a.ts`. **Seed has NOT been executed
+  against any DB yet** — deliberately left for the JTG fresh-stack
+  provisioning in W3.
+- **Earlier in this session window: separate worker bot (@Vocal_worker_bot),
+  citizen-contact-on-accept, government contacts seeded, audio file
+  alert + Enable-Alerts chip, re-assignment notification bug fixed**
+  (see commits `94e6384`, `7125c40`, `2ca2bbc`). All in `main`.
 
-**Previous session (2026-04-20): shipped to prod + worker queue + load-balanced
-assignment.** The app lives at **https://vocal-app-one.vercel.app**
-(GitHub: `Abhijit-sai/vocal-app`). Prod Telegram webhook is registered
-permanently against the Vercel URL — no more cloudflared cycling for
-demos. Ground workers finally have their own UI at `/my-assignments`,
-and the auto-assign algorithm now load-balances across the least-loaded
-candidates with territory → org-wide fallback. See §12 for details.
+**Three-week sprint plan locked.** Soft-launch JTG / Sircilla in 3 weeks:
+- **W1 (in progress):** D1 ✅ tenant config foundation, D2 ✅ Telangana
+  Tier A seed; D3-D5 — Sircilla Tier B (villages), refactor leftovers,
+  buffer.
+- **W2:** LLM-driven Telegram intake replacing the rigid state machine
+  — multimodal (voice + image via Gemini 2.5 Flash), Telugu/Tinglish,
+  civic-scope filter, polite decline. Build `/admin/intake-lab`
+  sandbox first to iterate prompts, then swap into webhook behind a
+  feature flag.
+- **W3:** Provision fresh Supabase + Vercel + Clerk for JTG. Register
+  two new Telegram bots. Run seeds against the new DB. Bootstrap
+  workers. Smoke test. Soft-launch.
+
+**Deferred to a post-launch hardening session:** Territory Admin UI,
+RLS enforcement, WhatsApp adapter, reports CSV/XLSX export, Sentry,
+Telegram attachment downloader, mobile-responsive tables.
 
 Current state at resumption:
 
-- **Prod:** Vercel deployed, webhook live, 10 seeded test users covering
-  every role (shared password `Vocal!Test2026`). A Hyderabad "Demo
-  Territory" (17.385, 78.4867) is seeded and every ground_worker is
-  attached to it via `user_territories`.
-- **Code state:** All §11 work is in main plus the §12 additions:
-  `services/assignmentService.ts` load-balanced sort, seeding script
-  that now backfills territories, `/my-assignments` worker queue page
-  with live countdown + accept/reject, sidebar nav update.
-- **DB state:** same as §11 — RLS still effectively off (service
-  client everywhere), migrations 001–003 applied.
+- **Prod:** `https://vocal-app-one.vercel.app` is the demo. Both
+  citizen bot (`@Bevocal_bot`) and worker bot (`@Vocal_worker_bot`)
+  registered against this URL. 10 seeded test users (shared password
+  `Vocal!Test2026`). 41 AP/TG gov contacts seeded.
+- **Code state:** all of §11–§14 work is on `main`. Latest commit at
+  pause: `3e7f029` (Telangana Tier A seed). Branding everywhere
+  reads from `TENANT_CONFIG` (no more hardcoded "My Leader" /
+  `Bevocal_bot` / brand colors).
+- **DB state:** migrations 001–005 applied. RLS still effectively off
+  (service client everywhere). Telangana Tier A NOT yet seeded (code
+  shipped, execution deferred).
 
-**First moves for a new session:** open §12 to see exactly what shipped
-on 2026-04-20, then pick from §7 pending work (vercel cron for
-`expire-assignments` is the top un-done item).
+**First moves for a new session:**
+1. Read §14 to refresh on the pivot + 3-week plan.
+2. Resume W1-D4/5 (Sircilla Tier B village seed) — Census 2011 LGD
+   data, ~150-200 villages within Sircilla AC's 6 mandals.
+3. Then W2 (LLM intake manager) — that's the biggest piece.
+4. **Do not run `npm run seed:telangana-tier-a` against demo** unless
+   you explicitly want demo polluted with 166 territory rows. Keep it
+   for the JTG fresh stack in W3.
+
+**Known live housekeeping (carry forward):**
+- `https://vocal-app-one.vercel.app/sounds/alert.wav` was 404 at last
+  check. Vercel may have caught up since; if still 404 after the latest
+  deploys, fall back to a base64-inlined data URL in the React
+  component.
+- Stray `images/` folder at repo root contains April screenshots — not
+  tracked, never committed. Leave as-is or delete locally.
 
 ---
 
@@ -961,3 +991,147 @@ User confirmed working with Gemini 2.5 Flash.
   download, tests).
 - Clerk sign-in → `users` row bootstrap (§7 item 8) is still deferred;
   seeded accounts are being used for demos.
+
+
+---
+
+## 14. 2026-05-06 → 2026-05-13 session window — Rebrand, separate worker bot, citizen contact reveal, gov contacts, audio alert, re-assignment fix, scope pivot to JTG/Sircilla, tenant config foundation, Telangana Tier A seed
+
+Long arc across multiple sittings. Shipped six commits and a fundamental product re-architecture for clone-and-config multi-tenancy.
+
+### 14a. Rebrand: Vocal / Be Vocal → My Leader
+
+Commit `94e6384`. Every user-visible string switched to "My Leader". Internal identifiers (function names like `getCurrentVocalUser`, env var names like `TELEGRAM_BOT_TOKEN`, localStorage keys like `vocal:sidebar-collapsed`) intentionally left as-is.
+
+- `public/logo.svg` wordmark: "BE VOCAL" → "MY LEADER"
+- Sign-in / sign-up: brand bubble "M" + "Sign in to My Leader"
+- Landing page: title + tagline + hero copy
+- Sidebar, AppShell topbar, dashboard layout default org name
+- `services/telegramService.ts` bot welcome + help templates
+- `services/aiService.ts` + `services/amplifyService.ts` `X-Title` headers
+- Amplify prompts: spokesperson byline + About boilerplate
+
+### 14b. Separate worker bot (@Vocal_worker_bot)
+
+Same commit `94e6384`. Architectural shift from the initial design: worker callbacks moved out of the citizen webhook into a dedicated worker bot. Both bots running against the same Vercel deployment.
+
+- `services/workerTelegramService.ts` — uses `WORKER_BOT_TOKEN`, `WORKER_WEBHOOK_SECRET`. Isolated send / answer-callback / clear-keyboard helpers.
+- `app/api/webhooks/telegram-worker/route.ts` — full worker webhook handler. Validates worker secret, dispatches `waccept:`, `wreject:`, `wupdate:` callbacks, handles `/start link_<userId>` deep-link for account linking, plus a plain `/start` welcome.
+- `services/workerNotifier.ts` — `notifyWorkerOfAssignment()`, `workerAcceptViaBot()`, `workerRejectViaBot()`, `sendWorkerDailyReminders()`, `linkWorkerTelegram()`. Worker `telegram_chat_id` stored in `users.metadata_json.telegram_chat_id` (no migration).
+- `components/workers/TelegramLinkBanner.tsx` — Link-Telegram CTA on My Assignments. Reads `NEXT_PUBLIC_WORKER_BOT_USERNAME` with fallback to `tenantBots.worker.username` after the §14g refactor.
+- `app/api/cron/worker-reminders/route.ts` — daily reminder cron endpoint, protected by `CRON_SECRET`. Not wired to a scheduler yet (free tier).
+- **Citizen webhook cleaned up:** removed `waccept:`/`wreject:` callback branches and `/start link_` handler. Citizen flow is isolated from worker flow.
+
+Production bot: `@Vocal_worker_bot` (token `8202117609:...`). Webhook registered against `https://vocal-app-one.vercel.app/api/webhooks/telegram-worker` with secret `c3120969...` (full secret in `.env.local`, not committed).
+
+### 14c. Citizen mobile number revealed to assigned workers
+
+Same commit `94e6384`. Privacy gate: phone hidden until worker accepts; privileged roles (super_admin, central_support) always see.
+
+- `app/(dashboard)/tickets/[id]/page.tsx` — `canSeeCitizenContact = isPrivileged || (ground_worker && citizen_identity_revealed_at)`. Renders a green-bordered Citizen Contact card with `tel:` link + Telegram handle.
+- `app/(dashboard)/my-assignments/page.tsx` — batch-fetches phones from `citizen_channel_identities` for active tickets where `citizen_identity_revealed_at` is set. Passes `citizen_phone` prop into `WorkerQueue`.
+- `components/workers/WorkerQueue.tsx` — `ActiveTicket` interface gains `citizen_phone?: string | null`. `ActiveCard` renders a tappable `tel:` link when present.
+- `services/workerNotifier.ts workerAcceptViaBot()` — on accept, sets `citizen_identity_revealed_at: now` and fetches the phone to include in the Telegram acceptance confirmation message.
+
+### 14d. Directory modal z-index fix + 41 AP/TG government contacts seeded
+
+Same commit `94e6384`.
+- `components/directory/ContactFormDialog.tsx` overlay raised from `z-40` → `z-[9999]`. Modal was being clipped by the AppShell top bar.
+- `scripts/seed-gov-contacts.ts` — 41 contacts across emergency lines (112/108/101/100), CMO grievance (1902 AP / 1100 TS), electricity discoms (APSPDCL/APEPDCL/TSSPDCL/TSNPDCL), HMWSSB, ACB (14400 AP / 1064 TS), civil supplies (1967), APSRTC/TGSRTC, GHMC/GVMC/VMC, disaster management (1070 AP / 1077 TS), Aarogyasri, Mee Seva, Dharani (TS land), panchayat raj, SC/ST/tribal welfare. Idempotent — skips by phone. Uses first active org user as `created_by`. Successfully ran against demo Supabase.
+
+### 14e. Worker alert sound — audio file + one-tap unlock chip
+
+Commit `7125c40`. The original Web Audio oscillator was silently blocked by browser autoplay policies (no user gesture → AudioContext suspended). Workers were missing assignment alerts.
+
+- `scripts/gen-alert-sound.js` — pure-Node WAV synthesizer. Generates `public/sounds/alert.wav` (47 KB two-tone ding: 1100 Hz → 60ms pause → 1500 Hz). Re-run to tweak the sound.
+- `components/shell/WorkerAlertSubscriber.tsx` — preloads hidden `<audio>` with `/sounds/alert.wav`. On new assignment: plays the file (falls back to oscillator if file fails). Also fires browser Notification if tab is in the background.
+- **One-tap unlock chip:** floating red Enable-Alert-Sounds button bottom-right of every dashboard page (ground_workers only). Tap once → plays a test ding + sets `localStorage.myleader:alerts-unlocked = '1'` → chip vanishes forever in that browser. That single gesture unlocks audio for the whole session, satisfying autoplay policy.
+- `components/workers/WorkerQueue.tsx` — removed its duplicate oscillator beep. The subscriber owns sound globally; the modal is visual-only.
+
+**Production status of `alert.wav`:** Vercel deploy was slow to pick up the new static asset. Last manual check showed 404 even after multiple commits. Likely resolves on the next code-change deploy (static assets sometimes need a forced refresh). If still 404 at JTG-stack time, inline as a base64 data URL in the React component.
+
+### 14f. Re-assignment notification bug — three real fixes
+
+Commit `2ca2bbc`. When a ticket's offer expired and got reassigned to a different worker, that worker received no Telegram alert and no in-app modal. Three root causes:
+
+1. **Fire-and-forget on the critical path.** `offerTicketToWorker` called `notifyWorkerOfAssignment(...).catch(() => {})` without awaiting. In Vercel serverless, in-flight promises after the response is sent can be terminated. The cron loop that re-offers tickets returned before the Telegram POST completed. **Fix:** await the call inside `offerTicketToWorker`. The function swallows its own errors so awaiting is safe.
+
+2. **`assignment_attempt_count` never selected.** The `select` in `offerTicketToWorker` left out the column, so `(undefined ?? 0) + 1` reset to `1` on every offer. Escalation never fired — the cron would cycle through workers forever. **Fix:** include the column in the select.
+
+3. **Expired worker got no closure.** The previous worker's stale Accept/Reject buttons silently stopped working. **Fix:** new `notifyWorkerOfReassignment(workerId, ticketNumber)` in `services/workerNotifier.ts` sends a short "Offer expired" message to the worker whose offer just expired.
+
+### 14g. Tenant config foundation — clone-and-config multi-tenancy (W1-D1)
+
+Commit `bcaaa4f`. The biggest architectural shift in this window.
+
+**Decision:** rather than building runtime-tenancy (multiple orgs in one DB), use **deploy-time tenancy**. Each client gets their own Vercel + Supabase + Clerk. To onboard one: clone the repo, edit `config/tenant.config.ts`, replace `public/logo.svg`, provision new accounts. No runtime tenant resolution code needed.
+
+**Shipped:**
+- `config/tenant.config.ts` — typed `TENANT_CONFIG` with sections:
+  - `app` — product name (My Leader), shortName (M), tagline, metadata description, logo + favicon paths
+  - `party` — slug (`jtg`), name (JTG), fullName (JTG), contactEmail, productionDomain
+  - `brand` — primaryColor (#3b82f6 — blue), primaryColorDark, accentColor (#CC0000 — red for landing). Injected as CSS variables.
+  - `bots` — citizen + worker bot usernames + welcome names
+  - `geography` — country, rootName (Telangana), rootCentroid, levels `[state, district, constituency, mandal, ward]`, primaryConstituency (Sircilla)
+  - `language` — primary (te), supported `[te, en]`
+  - `civicScope` — summary, included topics, excluded topics, politeDecline `{en, te}`. Categories sourced from `docs/research/telangana_public_grievance_topics.md` §10.
+  - `operations` — timezone (Asia/Kolkata), supportEmail
+- `components/TenantThemeProvider.tsx` — server component mounted in root layout `<body>`. Renders a `<style>` tag injecting `--brand-500/600/700` and `--tenant-accent` from config. Existing semantic tokens (`--primary`, `--shell-*`) cascade off `--brand-500` so overriding one value repaints the whole shell.
+- **15 files refactored** to read from config: `app/layout.tsx`, `app/page.tsx`, `app/(auth)/sign-in`, `app/(auth)/sign-up`, `app/(dashboard)/layout.tsx`, `components/shell/AppShell.tsx`, `Sidebar.tsx`, `TelegramLinkBanner.tsx`, `landing/QRCard.tsx`, `services/aiService.ts`, `amplifyService.ts`, `telegramService.ts`, `workerNotifier.ts`. Final grep: zero "My Leader" / "Bevocal_bot" / "hello@bevocal.in" outside `config/tenant.config.ts`.
+- **Telangana grievance taxonomy** saved to `docs/research/telangana_public_grievance_topics.md` for W2 LLM intake prompt calibration. ~50 example messages across 12 category buckets (drainage, potholes, water, electricity, traffic, land/Dharani, ration, pensions, police, women safety, cybercrime, stray dogs, lakes/nalas, jobs/TGPSC, accountability) with English / Tinglish / pure Telugu samples each.
+
+**Zero behavior change** for the demo: config defaults match existing strings, colors, bot usernames. Verified `npm run build` clean + final grep clean. The point of the refactor is to move the *source* of every string to one place without altering output.
+
+**Open carry-forward:** the landing page (`app/page.tsx`) still has ~50 hardcoded `#CC0000` references in its big inline `<style>` block. They match `tenantBrand.accentColor` for the current tenant. A future tenant with a different accent color needs a one-time find-replace in that one file. Documented in the config header comment.
+
+### 14h. Telangana Tier A territory seed (W1-D2)
+
+Commit `3e7f029`. Comprehensive geographic data for any Telangana deployment.
+
+**Data files (sourced via WebFetch from Wikipedia, ECI 2023 delimitation):**
+- `scripts/data/telangana/districts.json` — all 33 districts, headquarters, official mandal counts (sum 598), approximate centroid lat/lng
+- `scripts/data/telangana/constituencies.json` — all 119 ACs, AC number, parent district, reservation (GEN/SC/ST). All 119 verified to map to a known district (no orphans).
+- `scripts/data/telangana/mandals/rajanna-sircilla.json` — all 13 mandals of the launch district, with revenue-division and AC mapping. **Sircilla AC (#29) covers 6 mandals**: Sircilla, Thangallapalli, Gambhiraopet, Yellareddipet, Veernapalli, Mustabad. The other 7 mandals hang off Vemulawada AC (#28).
+
+**Runner:** `scripts/seed-telangana-tier-a.ts` (`npm run seed:telangana-tier-a`).
+- Idempotent — re-runs skip rows matched by `(organization_id, parent_territory_id, name, level_definition_id)`.
+- Reads level labels from `tenantGeography.levels` so future tenants get their own labels automatically.
+- Resolves mandal → AC parent when `constituency` field is set in the mandal JSON, else falls back to district. Sircilla AC's 6 mandals hang directly off the AC node for tight routing.
+- Reads all `mandals/*.json` files at startup. Adding a district's mandal file (e.g. `mandals/hyderabad.json`) and re-running seeds it without code change.
+
+**NOT executed against any DB.** Code shipped, JSON written. Run against the JTG fresh-stack Supabase in W3, not against demo.
+
+**Mandals NOT yet seeded for 32 of 33 districts.** Pragmatic call: the launch only needs Rajanna Sircilla. Other districts get added incrementally when needed.
+
+### Commits in this window (chronological)
+
+- `94e6384` — Rebrand + separate worker bot + citizen contact reveal + directory modal + gov contacts (15 files, +1,424 / -43)
+- `7125c40` — Audio file + Enable-Alerts chip (4 files, +216 / -45)
+- `2ca2bbc` — Re-assignment notification fix (2 files, +37 / -4)
+- `bcaaa4f` — Tenant config foundation (16 files, +913 / -39)
+- `3e7f029` — Telangana Tier A seed (5 files, +495 / -1)
+
+### Still pending after this window
+
+- **W1-D4/5:** Sircilla Tier B village seed (~150-200 villages from Census 2011 LGD within Sircilla AC's 6 mandals)
+- **W1-D3 buffer / cleanup:** verify Tier A data accuracy (spot-check ACs against TSEC), wire any leftover refactor edges
+- **W2:** LLM-driven Telegram intake replacing rigid state machine. Multimodal (voice + image via Gemini 2.5 Flash). Telugu/Tinglish fluency. Civic-scope filter with polite decline. Build `/admin/intake-lab` sandbox first (typed text + uploaded voice + uploaded image → see LLM output without DB writes) to iterate prompts. Then swap into webhook behind a feature flag, then enable for all citizens.
+- **W3:** Provision fresh Supabase + Vercel + Clerk for JTG. Register two new Telegram bots (`@JTG_citizen_bot`, `@JTG_worker_bot` — pending creation). Apply migrations 001-005. Run `seed:telangana-tier-a` + `seed:gov-contacts` against the new DB. Bootstrap super_admin + central_support + ground_workers for Sircilla. Smoke test. Soft-launch.
+
+### Cuts (post-launch hardening session)
+
+Explicitly carved out of the 3-week sprint:
+- Territory Admin UI (CSV / script seed instead)
+- RLS enforcement (service client stays for soft launch)
+- WhatsApp adapter (LLM manager is channel-agnostic — adapter slides in later)
+- Reports CSV / XLSX export
+- Sentry / formal error tracking
+- Telegram attachment downloader (pointers stay)
+- Mobile-responsive tables (`/tickets`, `/triage`, `/workers`)
+
+### Open carry-forwards
+
+- `alert.wav` may still be 404 on prod — verify on next session start; fall back to base64 data URL if persistent
+- Worker bot webhook is registered against the demo Vercel URL (`vocal-app-one.vercel.app`). When provisioning JTG, register a *separate* worker bot against the JTG Vercel URL.
+- The landing page CSS still has ~50 `#CC0000` references — fine for current tenant, requires find-replace for future tenants with a different accent color
+- Stray `images/` folder at repo root (April screenshots) — not tracked, leave or delete locally
