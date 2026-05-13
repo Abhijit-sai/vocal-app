@@ -1,7 +1,11 @@
 'use client'
 
-// Set NEXT_PUBLIC_WORKER_BOT_USERNAME in .env.local to your worker bot's username (without @).
-const BOT_USERNAME = process.env.NEXT_PUBLIC_WORKER_BOT_USERNAME ?? 'Bevocal_bot'
+import { tenantBots } from '@/config/tenant.config'
+
+// Env override wins for staging/dev flexibility; otherwise we fall back to
+// the worker bot username from the tenant config so a clone-and-config
+// deployment works without setting this env var.
+const BOT_USERNAME = process.env.NEXT_PUBLIC_WORKER_BOT_USERNAME ?? tenantBots.worker.username
 
 interface Props {
   userId: string

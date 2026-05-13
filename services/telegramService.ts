@@ -11,6 +11,8 @@
  * ` = code. Keep templates simple.
  */
 
+import { tenantApp } from '@/config/tenant.config'
+
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? ''
 
 // ----------------------------------------------------------------------------
@@ -94,15 +96,15 @@ export async function clearInlineKeyboard(
 
 export const BOT = {
   welcome: () =>
-`👋 *Hi, I'm the My Leader assistant.*
+`👋 *Hi, I'm the ${tenantApp.name} assistant.*
 I help you report civic issues to your local organization.
 
 *Tap a button below to get started.*
 You can send /cancel at any time to stop.`,
 
   help: () =>
-`*About My Leader*
-My Leader collects civic issues from citizens and routes them to people who can help.
+`*About ${tenantApp.name}*
+${tenantApp.name} collects civic issues from citizens and routes them to people who can help.
 
 I can help you with just two things:
 1. Filing a new issue — I'll ask a few quick questions.

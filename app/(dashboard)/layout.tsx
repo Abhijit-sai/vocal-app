@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import { AppShell } from '@/components/shell/AppShell'
 import { getCurrentVocalUser } from '@/lib/supabase/server'
+import { tenantApp } from '@/config/tenant.config'
 import type { RoleName } from '@/types/database'
 
 export default async function DashboardLayout({
@@ -46,7 +47,7 @@ export default async function DashboardLayout({
   return (
     <AppShell
       userRole={roleName}
-      orgName={(user as any).organizations?.name ?? 'My Leader'}
+      orgName={(user as any).organizations?.name ?? tenantApp.name}
       userName={user.full_name}
     >
       {children}

@@ -1,15 +1,16 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { QRCard } from '@/components/landing/QRCard'
+import { tenantApp, tenantParty, tenantBots } from '@/config/tenant.config'
 
-const TELEGRAM_URL = 'https://t.me/Bevocal_bot'
+const CITIZEN_BOT_USERNAME = tenantBots.citizen.username
+const TELEGRAM_URL = `https://t.me/${CITIZEN_BOT_USERNAME}`
 const LOGIN_URL = '/sign-in'
-const CONTACT_EMAIL = 'mailto:hello@bevocal.in'
+const CONTACT_EMAIL = `mailto:${tenantParty.contactEmail}`
 
 export const metadata: Metadata = {
-  title: 'My Leader — Your Voice, Straight to Your Leader',
-  description:
-    'Report civic issues directly to your MLA. No middlemen, no filters. Real on-ground intelligence for leaders and workers across AP & Telangana.',
+  title: `${tenantApp.name} — ${tenantApp.tagline}`,
+  description: tenantApp.description,
 }
 
 /* ─── Inline SVG icons ─────────────────────────────────────────────────────── */
@@ -89,8 +90,8 @@ export default function LandingPage() {
       <header className="lp-nav">
         <div className="lp-container">
           <div className="lp-nav-inner">
-            <a href="/" aria-label="My Leader home" className="lp-nav-logo">
-              <Image src="/logo.svg" alt="My Leader" width={160} height={40} priority style={{ height: '36px', width: 'auto' }} />
+            <a href="/" aria-label={`${tenantApp.name} home`} className="lp-nav-logo">
+              <Image src="/logo.svg" alt={tenantApp.name} width={160} height={40} priority style={{ height: '36px', width: 'auto' }} />
             </a>
             <nav aria-label="Main navigation" className="lp-nav-links">
               <a href="#citizens" className="lp-nav-link">For Citizens</a>
@@ -120,7 +121,7 @@ export default function LandingPage() {
                 No filters.
               </h1>
               <p className="lp-hero-sub">
-                My Leader connects citizens directly to their elected representative — bypassing media spin and worker bias. Report a real problem. Get real action.
+                {tenantApp.name} connects citizens directly to their elected representative — bypassing media spin and worker bias. Report a real problem. Get real action.
               </p>
               <div className="lp-hero-ctas">
                 <a href="#citizens" className="lp-btn-red lp-btn-lg">
@@ -210,7 +211,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <div className="lp-coming-soon-header">
-                  <div className="lp-card-label" style={{ color: '#9CA3AF' }}>My Leader App</div>
+                  <div className="lp-card-label" style={{ color: '#9CA3AF' }}>{tenantApp.name} App</div>
                   <span className="lp-badge-soon">Coming Soon</span>
                 </div>
                 <p className="lp-card-body-text" style={{ color: '#6B7280' }}>
@@ -315,7 +316,7 @@ export default function LandingPage() {
               {
                 step: '01',
                 title: 'Citizen Sends a Message',
-                body: 'Open Telegram, start a chat with My Leader. Send your grievance in text, photo, or audio — in Telugu or English. No forms. No queues.',
+                body: `Open Telegram, start a chat with ${tenantApp.name}. Send your grievance in text, photo, or audio — in Telugu or English. No forms. No queues.`,
                 imgSrc: '/images/ground-reality.png',
                 imgAlt: 'Residents standing on a waterlogged street in AP/Telangana — a real civic issue',
               },
@@ -364,7 +365,7 @@ export default function LandingPage() {
           </p>
           <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className="lp-btn-white-on-red">
             <IconTelegram />
-            Open My Leader on Telegram
+            Open {tenantApp.name} on Telegram
           </a>
         </div>
       </section>
@@ -374,7 +375,7 @@ export default function LandingPage() {
         <div className="lp-container">
           <div className="lp-footer-grid">
             <div>
-              <Image src="/logo.svg" alt="My Leader" width={140} height={36} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', marginBottom: '12px' }} />
+              <Image src="/logo.svg" alt={tenantApp.name} width={140} height={36} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', marginBottom: '12px' }} />
               <p className="lp-footer-tagline">
                 A civic issue platform for one organization at a time.<br />Built for AP &amp; Telangana.
               </p>
@@ -388,14 +389,14 @@ export default function LandingPage() {
             <div className="lp-footer-col">
               <p className="lp-footer-col-label">Connect</p>
               <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className="lp-footer-link lp-footer-tg">
-                <IconTelegram /> @Bevocal_bot
+                <IconTelegram /> @{CITIZEN_BOT_USERNAME}
               </a>
-              <a href={CONTACT_EMAIL} className="lp-footer-link">hello@bevocal.in</a>
+              <a href={CONTACT_EMAIL} className="lp-footer-link">{tenantParty.contactEmail}</a>
               <a href={LOGIN_URL} className="lp-footer-link-red">Karyakarta Login →</a>
             </div>
           </div>
           <div className="lp-footer-bottom">
-            <p>© 2026 My Leader. All rights reserved.</p>
+            <p>© 2026 {tenantApp.name}. All rights reserved.</p>
             <p>Made for the people of AP &amp; Telangana.</p>
           </div>
         </div>

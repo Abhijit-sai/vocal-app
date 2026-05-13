@@ -16,6 +16,7 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { sendWorkerMessage } from './workerTelegramService'
 import type { InlineKeyboardMarkup } from './workerTelegramService'
+import { tenantApp } from '@/config/tenant.config'
 
 // ── Inline keyboard helpers ────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ export async function notifyWorkerOfReassignment(
       chatId,
       `⏰ *Offer expired — ${ticketNumber}*\n\n` +
       `You didn't respond in time, so this ticket has been re-assigned to another team member.\n\n` +
-      `If you'd like to take more tickets, just stay on the *My Leader* app — new offers will appear automatically.`,
+      `If you'd like to take more tickets, just stay on the *${tenantApp.name}* app — new offers will appear automatically.`,
     )
   } catch {
     // Swallow — never throw on notification failure

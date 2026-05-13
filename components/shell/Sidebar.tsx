@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
+import { tenantApp } from '@/config/tenant.config'
 import type { RoleName } from '@/types/database'
 
 interface NavItem {
@@ -212,12 +213,12 @@ export function Sidebar({ userRole, orgName, userName, collapsed = false, onNavi
             boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
           }}
         >
-          M
+          {tenantApp.shortName}
         </div>
         {!collapsed && (
           <div className="min-w-0">
             <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--shell-text)' }}>
-              My Leader
+              {tenantApp.name}
             </div>
             <div className="text-[11px] truncate" style={{ color: 'var(--shell-muted)' }}>
               {orgName}

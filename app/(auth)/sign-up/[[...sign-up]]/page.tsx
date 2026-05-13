@@ -1,5 +1,6 @@
 import { SignUp } from '@clerk/nextjs'
 import Link from 'next/link'
+import { tenantApp } from '@/config/tenant.config'
 
 export default function SignUpPage() {
   return (
@@ -17,11 +18,11 @@ export default function SignUpPage() {
               boxShadow: 'var(--shadow-md)',
             }}
           >
-            M
+            {tenantApp.shortName}
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--canvas-text)' }}>
-              Create your My Leader account
+              Create your {tenantApp.name} account
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--canvas-muted)' }}>
               Start managing civic issues in minutes

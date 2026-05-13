@@ -1,5 +1,6 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
+import { tenantApp } from '@/config/tenant.config'
 
 export default function SignInPage() {
   return (
@@ -17,11 +18,11 @@ export default function SignInPage() {
               boxShadow: 'var(--shadow-md)',
             }}
           >
-            M
+            {tenantApp.shortName}
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--canvas-text)' }}>
-              Sign in to My Leader
+              Sign in to {tenantApp.name}
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--canvas-muted)' }}>
               Civic issue management platform

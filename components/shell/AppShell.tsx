@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { WorkerAlertSubscriber } from './WorkerAlertSubscriber'
+import { tenantApp } from '@/config/tenant.config'
 import type { RoleName } from '@/types/database'
 
 const LS_KEY = 'vocal:sidebar-collapsed'
@@ -175,11 +176,11 @@ function TopBar({
           className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[11px] text-white flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, var(--brand-500) 0%, var(--brand-700) 100%)' }}
         >
-          M
+          {tenantApp.shortName}
         </div>
         <div className="min-w-0">
           <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--shell-text)' }}>
-            My Leader
+            {tenantApp.name}
           </div>
           <div className="text-[10px] truncate -mt-0.5" style={{ color: 'var(--shell-muted)' }}>
             {orgName}

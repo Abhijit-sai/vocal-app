@@ -1,8 +1,9 @@
 'use client'
 
 import { QRCodeSVG } from 'qrcode.react'
+import { tenantBots } from '@/config/tenant.config'
 
-const TELEGRAM_URL = 'https://t.me/Bevocal_bot'
+const TELEGRAM_URL = `https://t.me/${tenantBots.citizen.username}`
 
 export function QRCard() {
   return (

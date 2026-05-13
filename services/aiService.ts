@@ -10,6 +10,8 @@
  * Central support must confirm before values are applied to the ticket.
  */
 
+import { tenantApp } from '@/config/tenant.config'
+
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1'
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? ''
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash-preview'
@@ -126,7 +128,7 @@ Rules:
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://vocal-app.vercel.app',
-        'X-Title': 'My Leader Civic Platform',
+        'X-Title': `${tenantApp.name} Civic Platform`,
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
@@ -215,7 +217,7 @@ Categories: ${ISSUE_CATEGORIES.join(', ')}`
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'https://vocal-app.vercel.app',
-        'X-Title': 'My Leader Civic Platform',
+        'X-Title': `${tenantApp.name} Civic Platform`,
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
