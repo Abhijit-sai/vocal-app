@@ -58,6 +58,16 @@ Top things that changed:
 RLS enforcement, WhatsApp adapter, reports CSV/XLSX export, Sentry,
 Telegram attachment downloader, mobile-responsive tables.
 
+**Infra decision (locked 2026-05-14): Path A — Supabase Cloud + Vercel
+for JTG day-1, migrate to AWS in a post-launch hardening session.**
+JTG production will eventually run on AWS (RDS Postgres + ECS/EC2 for
+the Next.js app). Current Supabase deployment will become UAT/QA.
+Migration plan: self-host Supabase OSS on AWS pointing at RDS — zero
+application code changes; just infra. Vercel → AWS hosting similarly
+deferred. **No impact on W1/W2 build work** — application code is
+database-agnostic in our usage. Decision revisits at W3 kickoff only
+to confirm we're still on Supabase Cloud for the JTG soft-launch.
+
 Current state at resumption:
 
 - **Prod:** `https://vocal-app-one.vercel.app` is the demo. Both
