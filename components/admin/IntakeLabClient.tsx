@@ -134,9 +134,10 @@ export function IntakeLabClient() {
                 className="max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
                 style={t.role === 'user'
                   ? { background: 'var(--primary-soft-bg)', color: 'var(--primary-soft-text)' }
-                  : { background: 'var(--shell-surface-hi)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}
+                  : { background: 'var(--canvas-surface-alt)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}
               >
-                <div className="text-[10px] uppercase tracking-wider opacity-60 mb-1">
+                <div className="text-[10px] uppercase tracking-wider mb-1"
+                  style={{ color: t.role === 'user' ? 'var(--primary-soft-text)' : 'var(--canvas-muted)', opacity: 0.85 }}>
                   {t.role === 'user' ? 'Citizen' : `Assistant${t.response?._meta?.fallback ? ' (fallback)' : ''}`}
                 </div>
                 {t.content}
@@ -233,7 +234,7 @@ export function IntakeLabClient() {
             <p className="text-xs italic" style={{ color: 'var(--canvas-muted)' }}>(empty)</p>
           ) : (
             <pre className="text-[11px] p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-words"
-              style={{ background: 'var(--shell-surface-hi)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}>
+              style={{ background: 'var(--canvas-surface-alt)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}>
               {JSON.stringify(draft, null, 2)}
             </pre>
           )}
@@ -245,7 +246,7 @@ export function IntakeLabClient() {
               Raw JSON response
             </summary>
             <pre className="text-[10px] p-2 mt-2 rounded-md overflow-x-auto whitespace-pre-wrap break-words"
-              style={{ background: 'var(--shell-surface-hi)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}>
+              style={{ background: 'var(--canvas-surface-alt)', color: 'var(--canvas-text)', border: '1px solid var(--canvas-border)' }}>
               {JSON.stringify(latestResponse, null, 2)}
             </pre>
           </details>
