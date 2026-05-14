@@ -1,21 +1,208 @@
 {
   "district": "Rajanna Sircilla",
-  "source": "https://en.wikipedia.org/wiki/Rajanna_Sircilla_district + https://en.wikipedia.org/wiki/Sircilla_Assembly_constituency",
-  "verified_at": "2026-05-13",
-  "note": "AC mapping: 'Sircilla' AC covers 6 mandals (marked sircilla_ac=true). 'Vemulawada' AC covers the rest (Vemulawada Rural division + some Sircilla-division remnants). Verify with TSEC before launch.",
+  "source": "https://en.wikipedia.org/wiki/Rajanna_Sircilla_district, https://en.wikipedia.org/wiki/Sircilla_Assembly_constituency, https://telanganaportal.in/mandal/* (per-mandal village lists)",
+  "verified_at": "2026-05-14",
+  "note": "AC mapping: 'Sircilla' AC covers 6 mandals (marked constituency='Sircilla'). 'Vemulawada' AC covers the rest. Villages sourced per-mandal from telanganaportal.in cross-checked against rajannasircilla.telangana.gov.in. Counts may drift slightly as new gram panchayats split — verify with TSEC before launch.",
   "mandals": [
-    { "name": "Sircilla",        "revenue_division": "Sircilla",   "constituency": "Sircilla",   "centroid_lat": 18.387, "centroid_lng": 78.811 },
-    { "name": "Thangallapalli",  "revenue_division": "Sircilla",   "constituency": "Sircilla" },
-    { "name": "Gambhiraopet",    "revenue_division": "Sircilla",   "constituency": "Sircilla" },
-    { "name": "Yellareddipet",   "revenue_division": "Sircilla",   "constituency": "Sircilla" },
-    { "name": "Veernapalli",     "revenue_division": "Sircilla",   "constituency": "Sircilla" },
-    { "name": "Mustabad",        "revenue_division": "Sircilla",   "constituency": "Sircilla" },
-    { "name": "Ellanthakunta",   "revenue_division": "Sircilla",   "constituency": "Vemulawada" },
-    { "name": "Vemulawada",      "revenue_division": "Vemulawada", "constituency": "Vemulawada", "centroid_lat": 18.477, "centroid_lng": 78.866 },
-    { "name": "Vemulawada Rural","revenue_division": "Vemulawada", "constituency": "Vemulawada" },
-    { "name": "Chandurthi",      "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
-    { "name": "Konaraopeta",     "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
-    { "name": "Boinpalli",       "revenue_division": "Vemulawada", "constituency": "Vemulawada" },
-    { "name": "Rudrangi",        "revenue_division": "Vemulawada", "constituency": "Vemulawada" }
+    {
+      "name": "Sircilla",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "centroid_lat": 18.387,
+      "centroid_lng": 78.811,
+      "villages": [
+        { "name": "Sircilla" },
+        { "name": "Bonala" },
+        { "name": "Mushtipalli" },
+        { "name": "Peddur" },
+        { "name": "Sardapur" }
+      ]
+    },
+    {
+      "name": "Thangallapalli",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "villages": [
+        { "name": "Ankireddypally" },
+        { "name": "Ankusapur" },
+        { "name": "Baddenapally" },
+        { "name": "Balamallupally" },
+        { "name": "Baswapur" },
+        { "name": "Cheerlavanch" },
+        { "name": "Chinnalingapur" },
+        { "name": "Chinthalathana" },
+        { "name": "Desaipally" },
+        { "name": "Gandilachakkapet" },
+        { "name": "Gopalraopally" },
+        { "name": "Indiramma Colony" },
+        { "name": "Indiranagar" },
+        { "name": "Jillella" },
+        { "name": "Kasbe Katkur" },
+        { "name": "Laxmipur" },
+        { "name": "Mallapur" },
+        { "name": "Mandepally" },
+        { "name": "Narsimhulapally" },
+        { "name": "Nerella" },
+        { "name": "Obulapur" },
+        { "name": "Padmanagar" },
+        { "name": "Papaiahpally" },
+        { "name": "Rallapet" },
+        { "name": "Ramachandrapur" },
+        { "name": "Ramannapally" },
+        { "name": "Sarampally" },
+        { "name": "Thadur" },
+        { "name": "Thangallapalli" },
+        { "name": "Venugopalpur" }
+      ]
+    },
+    {
+      "name": "Gambhiraopet",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "villages": [
+        { "name": "Dammannapet" },
+        { "name": "Desaipet" },
+        { "name": "Gajasingavaram" },
+        { "name": "Gambhiraopet" },
+        { "name": "Gorantala" },
+        { "name": "Hiralal Thanda" },
+        { "name": "Jagadamba Thanda" },
+        { "name": "Kollamaddi" },
+        { "name": "Kothapally" },
+        { "name": "Laxmipoor" },
+        { "name": "Lingannapet" },
+        { "name": "Mallareddypet" },
+        { "name": "Mallupalli" },
+        { "name": "Mucherla" },
+        { "name": "Mustafanager" },
+        { "name": "Nagampet" },
+        { "name": "Narmal" },
+        { "name": "Ponnalapally" },
+        { "name": "Rajeshshwar Rao Colony" },
+        { "name": "Rajupeta" },
+        { "name": "Samudralingapur" },
+        { "name": "Srigadha" }
+      ]
+    },
+    {
+      "name": "Yellareddipet",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "villages": [
+        { "name": "Agraharam" },
+        { "name": "Akkapally" },
+        { "name": "Almaspur" },
+        { "name": "Bakurpally Thanda" },
+        { "name": "Bandalingampally" },
+        { "name": "Boppapur" },
+        { "name": "Bugga Rajeshwar Thanda" },
+        { "name": "Devunigutta Thanda" },
+        { "name": "Dumala" },
+        { "name": "Gollapally" },
+        { "name": "Gundaram (Paticherla)" },
+        { "name": "Guntapalli Chervu Thanda" },
+        { "name": "Haridas Nagar" },
+        { "name": "Jai Sevalal Thanda" },
+        { "name": "Kishtunayak Thanda" },
+        { "name": "Korutlapet" },
+        { "name": "Narayanapuram (Pattirachu)" },
+        { "name": "Padira" },
+        { "name": "Pothureddypally" },
+        { "name": "Racherla Bakurpally" },
+        { "name": "Rajannapet" },
+        { "name": "Rayagatlapalli" },
+        { "name": "Singaram" },
+        { "name": "Thimmapuram" },
+        { "name": "Venkatapur" },
+        { "name": "Yellareddypet" }
+      ]
+    },
+    {
+      "name": "Veernapalli",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "note": "List may be incomplete — verify with TSEC. Includes the well-known Lalsingh Tanda panchayat.",
+      "villages": [
+        { "name": "Adivi Padira" },
+        { "name": "Babai Cheruvu Thanda" },
+        { "name": "Banjeru" },
+        { "name": "Bavusingh Nayak Tanda" },
+        { "name": "Bhukya Tanda" },
+        { "name": "Erragadda Thanda" },
+        { "name": "Gajarnapally" },
+        { "name": "Jawaharlal Thanda" },
+        { "name": "Kancharla" },
+        { "name": "Lalsingh Tanda" },
+        { "name": "Maddimalla Thanda" },
+        { "name": "Shanthinagar" },
+        { "name": "Veernapalli" }
+      ]
+    },
+    {
+      "name": "Mustabad",
+      "revenue_division": "Sircilla",
+      "constituency": "Sircilla",
+      "villages": [
+        { "name": "Avunoor" },
+        { "name": "Bandankal" },
+        { "name": "Cheekode" },
+        { "name": "Chippalapally" },
+        { "name": "Gannevanipally" },
+        { "name": "Gopalpally" },
+        { "name": "Gudem" },
+        { "name": "Gudur" },
+        { "name": "Kondapur" },
+        { "name": "Maddikunta" },
+        { "name": "Mohinikunta" },
+        { "name": "Morraipally" },
+        { "name": "Morrapoor" },
+        { "name": "Musthabad" },
+        { "name": "Namapur" },
+        { "name": "Pothugal" },
+        { "name": "Ramlaxmanapally" },
+        { "name": "Ramreddypally" },
+        { "name": "Sevalal Thanda" },
+        { "name": "Therlamaddi" },
+        { "name": "Thurkapalli" },
+        { "name": "Venkatraopalli" }
+      ]
+    },
+    {
+      "name": "Ellanthakunta",
+      "revenue_division": "Sircilla",
+      "constituency": "Vemulawada"
+    },
+    {
+      "name": "Vemulawada",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada",
+      "centroid_lat": 18.477,
+      "centroid_lng": 78.866
+    },
+    {
+      "name": "Vemulawada Rural",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada"
+    },
+    {
+      "name": "Chandurthi",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada"
+    },
+    {
+      "name": "Konaraopeta",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada"
+    },
+    {
+      "name": "Boinpalli",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada"
+    },
+    {
+      "name": "Rudrangi",
+      "revenue_division": "Vemulawada",
+      "constituency": "Vemulawada"
+    }
   ]
 }

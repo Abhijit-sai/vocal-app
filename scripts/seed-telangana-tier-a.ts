@@ -10,8 +10,11 @@
  *   • 33 districts
  *   • 119 assembly constituencies (per ECI 2023 delimitation)
  *   • 13 mandals for Rajanna Sircilla district (where Sircilla AC launches)
- *   • Mandals for the other 32 districts: deferred — add via CSV or a
- *     per-district seed file once authoritative data is on hand.
+ *   • ~117 villages across Sircilla AC's 6 mandals (Tier B — embedded in
+ *     the rajanna-sircilla.json mandal file under each mandal's
+ *     `villages: []` array).
+ *   • Mandals + villages for the other 32 districts: deferred — drop in
+ *     a per-district JSON file (same schema) and re-run the seed.
  *
  * Idempotent — re-runs skip rows that already exist (matched by
  * organization_id + parent_territory_id + name).
@@ -73,12 +76,20 @@ interface ConstituencyRow {
   reservation: 'GEN' | 'SC' | 'ST'
 }
 
+interface VillageRow {
+  name: string
+  centroid_lat?: number
+  centroid_lng?: number
+}
+
 interface MandalRow {
   name: string
   revenue_division?: string
   constituency?: string
   centroid_lat?: number
   centroid_lng?: number
+  note?: string
+  villages?: VillageRow[]
 }
 
 interface MandalFile {
@@ -251,9 +262,11 @@ async function main() {
   }
   console.log(`✓ Constituencies: ${acsCreated} created / ${constituencies.length - acsCreated - acsSkipped} existing / ${acsSkipped} skipped`)
 
-  // 4. Mandals (only for districts with data files)
+  // 4. Mandals + Villages (only for districts with data files)
   let mandalsCreated = 0
   let mandalsSkipped = 0
+  let villagesCreated = 0
+  let villagesSkipped = 0
   for (const file of mandalFiles) {
     const parentDistrictId = districtIds[file.district]
     if (!parentDistrictId) {
@@ -274,7 +287,7 @@ async function main() {
           .maybeSingle()
         if (ac) parentId = ac.id
       }
-      const { created } = await upsertTerritory({
+      const mandalResult = await upsertTerritory({
         name: m.name,
         levelDefId: levelIds[LEVELS[3]],
         parentId,
@@ -284,13 +297,36 @@ async function main() {
           revenue_division: m.revenue_division,
           constituency: m.constituency,
           district: file.district,
+          ...(m.note ? { note: m.note } : {}),
         },
       })
-      if (created) mandalsCreated++
+      if (mandalResult.created) mandalsCreated++
       else mandalsSkipped++
+
+      // Villages — Tier B. Optional per mandal; many mandals have no villages
+      // listed yet, which is fine.
+      if (m.villages && m.villages.length > 0) {
+        for (const v of m.villages) {
+          const vResult = await upsertTerritory({
+            name: v.name,
+            levelDefId: levelIds[LEVELS[4]],
+            parentId: mandalResult.id,
+            centroidLat: v.centroid_lat ?? null,
+            centroidLng: v.centroid_lng ?? null,
+            metadata: {
+              mandal: m.name,
+              constituency: m.constituency,
+              district: file.district,
+            },
+          })
+          if (vResult.created) villagesCreated++
+          else villagesSkipped++
+        }
+      }
     }
   }
-  console.log(`✓ Mandals: ${mandalsCreated} created / ${mandalsSkipped} existing  (${mandalFiles.length} district file(s) processed)`)
+  console.log(`✓ Mandals:  ${mandalsCreated} created / ${mandalsSkipped} existing  (${mandalFiles.length} district file(s) processed)`)
+  console.log(`✓ Villages: ${villagesCreated} created / ${villagesSkipped} existing`)
 
   // Summary
   console.log('\n────────── Summary ──────────')
@@ -298,9 +334,13 @@ async function main() {
   console.log(`Districts:       ${districts.length}`)
   console.log(`Constituencies:  ${constituencies.length - acsSkipped}`)
   console.log(`Mandals:         ${mandalsCreated + mandalsSkipped}`)
+  console.log(`Villages:        ${villagesCreated + villagesSkipped}`)
   console.log(`\nDistricts with mandals seeded:`)
-  for (const f of mandalFiles) console.log(`  • ${f.district} (${f.mandals.length} mandals)`)
-  console.log(`\nDistricts WITHOUT mandals (load via CSV when ready):`)
+  for (const f of mandalFiles) {
+    const villageTotal = f.mandals.reduce((s, m) => s + (m.villages?.length ?? 0), 0)
+    console.log(`  • ${f.district} (${f.mandals.length} mandals, ${villageTotal} villages)`)
+  }
+  console.log(`\nDistricts WITHOUT mandals (load via JSON when ready):`)
   for (const d of districts) {
     if (!mandalFiles.find(f => f.district === d.name)) {
       console.log(`  • ${d.name} (${d.mandals_count} mandals official)`)
