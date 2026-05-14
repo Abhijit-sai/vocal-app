@@ -150,6 +150,10 @@ const NAV_SECTIONS: NavSection[] = [
       // LLM intake sandbox — pure prompt iteration, no DB writes.
       { label: 'Intake Lab', href: '/admin/intake-lab', icon: Icons.amplify,
         roles: ['super_admin', 'central_support'] },
+      // Switch the live citizen Telegram bot between V1 (state machine)
+      // and V2 (LLM conversation manager). super_admin only.
+      { label: 'Intake Settings', href: '/admin/intake-settings', icon: Icons.amplify,
+        roles: ['super_admin'] },
     ],
   },
 ]
