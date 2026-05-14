@@ -147,6 +147,9 @@ const NAV_SECTIONS: NavSection[] = [
       // Hobby. Central support taps it to sweep expired offers.
       { label: 'Jobs', href: '/jobs', icon: Icons.jobs,
         roles: ['super_admin', 'central_support'] },
+      // LLM intake sandbox — pure prompt iteration, no DB writes.
+      { label: 'Intake Lab', href: '/admin/intake-lab', icon: Icons.amplify,
+        roles: ['super_admin', 'central_support'] },
     ],
   },
 ]
