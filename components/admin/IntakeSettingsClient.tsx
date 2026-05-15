@@ -12,6 +12,7 @@
  */
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import type { IntakeVersion } from '@/services/intakeSettingsService'
 
 interface Props { currentVersion: IntakeVersion }
@@ -21,13 +22,11 @@ const OPTIONS: Array<{
   title: string
   subtitle: string
   bullets: string[]
-  recommended?: 'production' | 'pilot'
 }> = [
   {
     value: 'v1',
     title: 'V1 — Guided State Machine',
     subtitle: 'Original rigid flow. Predictable, no LLM dependency.',
-    recommended: 'production',
     bullets: [
       'Step-by-step: issue → media → location → confirm → file',
       'No AI required to handle the conversation',
@@ -38,12 +37,11 @@ const OPTIONS: Array<{
   {
     value: 'v2',
     title: 'V2 — LLM Conversation Manager',
-    subtitle: 'New natural-language intake. Use after pilot validates quality.',
-    recommended: 'pilot',
+    subtitle: 'Natural-language intake. Use after pilot validates quality.',
     bullets: [
-      'Telugu / Tinglish / English — replies in the citizen’s language',
-      'Asks intelligent follow-ups, not a checklist',
-      'Civic-scope filter — politely declines family / personal disputes',
+      'Responds in the citizen’s own language (Telugu, Hindi, English, mixed — auto-detected)',
+      'Asks intelligent follow-ups, not a fixed checklist',
+      'Civic-scope filter — empathetic decline of clearly personal matters',
       'Multimodal-ready (voice + image when W2-D2 ships)',
       'Falls back gracefully if OpenRouter is down',
     ],
@@ -51,6 +49,7 @@ const OPTIONS: Array<{
 ]
 
 export function IntakeSettingsClient({ currentVersion }: Props) {
+  const router = useRouter()
   const [selected, setSelected] = useState<IntakeVersion>(currentVersion)
   const [saved, setSaved]       = useState<IntakeVersion>(currentVersion)
   const [error, setError]       = useState<string | null>(null)
@@ -71,9 +70,16 @@ export function IntakeSettingsClient({ currentVersion }: Props) {
         })
         const body = await res.json()
         if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
-        setSaved(target)
-        setFlash(`Switched to ${target.toUpperCase()}.`)
+        // Use the server's confirmed value, not our optimistic `target` —
+        // guards against any disconnect between UI and backend state.
+        const serverVersion: IntakeVersion = body.version === 'v2' ? 'v2' : 'v1'
+        setSaved(serverVersion)
+        setSelected(serverVersion)
+        setFlash(`Switched to ${serverVersion.toUpperCase()}.`)
         setTimeout(() => setFlash(null), 3000)
+        // Trigger a fresh server-side render so the SSR-fetched
+        // `currentVersion` prop also reflects the change on next nav.
+        router.refresh()
       } catch (e: any) {
         setError(e?.message ?? 'Save failed')
       }
@@ -118,15 +124,10 @@ export function IntakeSettingsClient({ currentVersion }: Props) {
                       {opt.title}
                     </h3>
                     {isLive && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
-                        style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--green-600)' }}>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green-600)', border: '1px solid rgba(16,185,129,0.35)' }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green-600)' }} />
                         Live
-                      </span>
-                    )}
-                    {opt.recommended === 'production' && (
-                      <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded"
-                        style={{ background: 'var(--shell-surface-hi)', color: 'var(--shell-text)' }}>
-                        Default
                       </span>
                     )}
                   </div>

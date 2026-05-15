@@ -26,6 +26,8 @@ interface Turn {
 interface IntakeResponse {
   language: string
   intent: string
+  scopeAssessment: 'in_scope' | 'needs_review' | 'out_of_scope'
+  scopeReason?: string
   draftUpdates: Record<string, unknown>
   needsMoreInfo: string[]
   readyToFile: boolean
@@ -35,15 +37,23 @@ interface IntakeResponse {
   _meta?: { model: string; fallback: boolean; error?: string; raw_response?: string }
 }
 
-// Curated examples covering civic / out-of-scope / mixed-language cases.
+// Curated examples covering languages + the tri-state scope:
+// in_scope (clear civic), needs_review (ambiguous but worth taking),
+// out_of_scope (clearly private/personal with no civic angle).
 const EXAMPLES: { label: string; text: string }[] = [
-  { label: 'Telugu — drainage',  text: 'మా ఊరిలో డ్రైనేజీ నీరు రోడ్డుపైకి వస్తోంది, ఎవరూ పట్టించుకోవడం లేదు.' },
-  { label: 'Tinglish — power',   text: 'Maa colony lo current 3 days nundi cut chesthunnaru, evaru cheppadam ledu.' },
-  { label: 'English — pothole',  text: 'There is a huge pothole on the main road near my house and someone could get hurt.' },
-  { label: 'Telugu — ration',    text: 'రేషన్ కార్డ్ కోసం దరఖాస్తు చేసాను, మూడు నెలలు అయింది, ఇంకా రాలేదు.' },
-  { label: 'OOS — family',       text: 'Maa annayyatho aasti panchina daani gurinchi sahaayam kaavaali.' },
-  { label: 'OOS — marriage',     text: 'My husband is harassing me and I want a divorce. Can you help?' },
-  { label: 'Drift — civic→OOS',  text: 'మా రోడ్డు బాగు లేదు. మరియు మా అన్నయ్యతో నాకు గొడవ ఉంది.' },
+  { label: 'Telugu — drainage',       text: 'మా ఊరిలో డ్రైనేజీ నీరు రోడ్డుపైకి వస్తోంది, ఎవరూ పట్టించుకోవడం లేదు.' },
+  { label: 'Tinglish — power',        text: 'Maa colony lo current 3 days nundi cut chesthunnaru, evaru cheppadam ledu.' },
+  { label: 'English — pothole',       text: 'There is a huge pothole on the main road near my house and someone could get hurt.' },
+  { label: 'Hindi — ration',          text: 'राशन कार्ड के लिए तीन महीने पहले आवेदन किया, अभी तक कुछ नहीं हुआ।' },
+  { label: 'Telugu — ration',         text: 'రేషన్ కార్డ్ కోసం దరఖాస్తు చేసాను, మూడు నెలలు అయింది, ఇంకా రాలేదు.' },
+  // Should default to needs_review (women's safety + police inaction angle)
+  { label: 'Review — DV / FIR',       text: 'My husband beats me almost every day and the police refused to file an FIR. I don\'t know what to do.' },
+  // Should default to needs_review (land grab angle inside a family dispute)
+  { label: 'Review — land grab',      text: 'Maa annayya maa amma peruna unna land ni illegal ga occupy chesadu, official ki complaint pettina kaani evaru spandinchadam ledu.' },
+  // Should be out_of_scope (purely private)
+  { label: 'OOS — relationship',      text: 'My girlfriend broke up with me and I want her back. Can you help me message her?' },
+  // Drift — bot should focus on civic part
+  { label: 'Drift — civic→personal',  text: 'మా రోడ్డు బాగు లేదు. మరియు మా అన్నయ్యతో నాకు గొడవ ఉంది.' },
 ]
 
 export function IntakeLabClient() {
@@ -141,16 +151,22 @@ export function IntakeLabClient() {
                   {t.role === 'user' ? 'Citizen' : `Assistant${t.response?._meta?.fallback ? ' (fallback)' : ''}`}
                 </div>
                 {t.content}
-                {t.response?.outOfScope && (
+                {t.response?.scopeAssessment === 'out_of_scope' && (
                   <div className="text-[10px] mt-1 px-1.5 py-0.5 inline-block rounded"
                     style={{ background: 'var(--alert-warning-bg)', color: 'var(--alert-warning-text)' }}>
-                    Out of scope: {t.response.outOfScopeReason ?? 'n/a'}
+                    Out of scope · {t.response.scopeReason ?? 'n/a'}
+                  </div>
+                )}
+                {t.response?.scopeAssessment === 'needs_review' && (
+                  <div className="text-[10px] mt-1 px-1.5 py-0.5 inline-block rounded"
+                    style={{ background: 'var(--alert-info-bg)', color: 'var(--alert-info-text)' }}>
+                    Needs review · {t.response.scopeReason ?? 'flagged for human review'}
                   </div>
                 )}
                 {t.response?.readyToFile && (
                   <div className="text-[10px] mt-1 px-1.5 py-0.5 inline-block rounded"
                     style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--green-600)' }}>
-                    Ready to file
+                    Ready to file{t.response.scopeAssessment === 'needs_review' ? ' (flagged for review)' : ''}
                   </div>
                 )}
               </div>
@@ -215,9 +231,9 @@ export function IntakeLabClient() {
             <dl className="text-xs space-y-2">
               <Field label="Language" value={latestResponse.language} />
               <Field label="Intent" value={latestResponse.intent} />
+              <Field label="Scope" value={latestResponse.scopeAssessment} />
+              {latestResponse.scopeReason && <Field label="Scope reason" value={latestResponse.scopeReason} />}
               <Field label="Ready to file" value={String(latestResponse.readyToFile)} />
-              <Field label="Out of scope" value={String(latestResponse.outOfScope)} />
-              {latestResponse.outOfScopeReason && <Field label="OOS reason" value={latestResponse.outOfScopeReason} />}
               {latestResponse.needsMoreInfo.length > 0 && (
                 <Field label="Needs more" value={latestResponse.needsMoreInfo.join(', ')} />
               )}
