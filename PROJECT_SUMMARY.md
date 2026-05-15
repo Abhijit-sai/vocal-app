@@ -68,6 +68,26 @@ deferred. **No impact on W1/W2 build work** — application code is
 database-agnostic in our usage. Decision revisits at W3 kickoff only
 to confirm we're still on Supabase Cloud for the JTG soft-launch.
 
+**Product scope adjustments (locked 2026-05-14): see PRD §17.**
+- 🅿️ **Multimodal intake (LLM voice + image understanding) PARKED** to
+  post-launch hardening. The `IntakeRequest.media` field stays in the
+  contract so wiring it later requires no schema change.
+- ✅ **Image attachments — download to Supabase Storage + inline ticket
+  preview** is now pre-launch scope (EPIC E1 in `docs/project-management/
+  backlog.md`). Replaces multimodal as the near-term media story.
+  Visibility gated by the same `citizen_identity_revealed_at` rule as
+  the citizen phone reveal.
+- ✅ **Amplify — notes & image attachments as draft sources** is now
+  pre-launch scope (EPIC E2). Central support can pick worker notes
+  and citizen photos when generating campaign drafts.
+
+**Backlog management.** Two new artefacts in `docs/project-management/`:
+- `backlog.md` — canonical upcoming-work backlog organised into 8 epics
+  (E1-E8) with story tables. Updated at the end of every session.
+- `linear-import-2026-05-14.csv` — Linear-ready CSV with all 58
+  upcoming stories. Re-generated per session when the backlog shifts.
+  Import into Linear for visual project tracking.
+
 Current state at resumption:
 
 - **Prod:** `https://vocal-app-one.vercel.app` is the demo. Both
@@ -1145,3 +1165,88 @@ Explicitly carved out of the 3-week sprint:
 - Worker bot webhook is registered against the demo Vercel URL (`vocal-app-one.vercel.app`). When provisioning JTG, register a *separate* worker bot against the JTG Vercel URL.
 - The landing page CSS still has ~50 `#CC0000` references — fine for current tenant, requires find-replace for future tenants with a different accent color
 - Stray `images/` folder at repo root (April screenshots) — not tracked, leave or delete locally
+
+
+---
+
+## 15. 2026-05-14 session — Intake V2 lab + V1↔V2 settings + empathy rework + scope re-prioritisation + backlog setup
+
+Dense build session. Shipped the LLM intake foundation and three rounds of refinements, then re-prioritised the sprint and stood up a proper backlog workflow.
+
+### 15a. Path A locked, sprint plan stable
+
+Infrastructure decision: Supabase Cloud + Vercel for JTG soft-launch (Path A). AWS migration via self-hosted Supabase OSS pointing at RDS is deferred to post-launch — application code changes required = zero. Vercel → AWS hosting similarly deferred. Note added to §0.
+
+### 15b. W2-D1 — LLM intake conversation manager (commit `997f21b`)
+
+Pure-text, channel-agnostic intake engine. Replaces (will replace) the rigid `telegramFlow` state machine.
+
+- `services/intakeConversationManager.ts` — `processInbound({history, newMessage, existingDraft}) → IntakeResponse`. Tenant-aware system prompt (reads `TENANT_CONFIG.civicScope`). Structured JSON output via Gemini 2.5 Flash. Fail-soft to a bilingual te+en error reply if OpenRouter is down.
+- `app/api/admin/intake-lab/test/route.ts` — pure sandbox endpoint, no DB writes, role-gated to super_admin + central_support.
+- `app/(dashboard)/admin/intake-lab/page.tsx` + `components/admin/IntakeLabClient.tsx` — two-pane sandbox UI. Chat-style conversation on the left, structured-response inspector on the right (language, intent, scope, draft accumulator, raw JSON). Quick-example chips for fast iteration.
+- Sidebar entry added under Admin.
+
+### 15c. W2-D1 contrast fix (commit `dce594a`)
+
+Assistant bubbles were using `--shell-surface-hi` (dark navy intended for nav chrome) with `--canvas-text` (near-black), making replies unreadable. Switched to `--canvas-surface-alt` (light gray) so dark text reads cleanly. Same fix on the inspector `<pre>` blocks.
+
+### 15d. W2-D1.5 — V1 ↔ V2 intake-engine toggle (commit `5896163`)
+
+User-requested: the rigid state machine should remain available as "V1" and the new LLM as "V2", with a SuperAdmin UI to switch.
+
+- **Migration 006** — adds `organization_settings.intake_conversation_version text NOT NULL DEFAULT 'v1'` with `CHECK ('v1', 'v2')`. Existing rows default to v1. **Migration shipped as SQL but not yet applied** to demo Supabase — user action.
+- `services/intakeSettingsService.ts` — `getIntakeVersion(orgId)` + `setIntakeVersion(orgId, v)`. Falls back to 'v1' if column missing.
+- `app/api/admin/intake-settings/route.ts` — GET returns current value; POST writes + emits `intake_version_changed` audit row. Super_admin only.
+- `app/(dashboard)/admin/intake-settings/page.tsx` + `components/admin/IntakeSettingsClient.tsx` — radio-card UI with V1/V2 descriptions, Live badge, save + flash + discard. Sidebar entry under Admin.
+- **Webhook integration is NOT yet wired** — the flag is cosmetic until W2-D3 (EPIC E3 in backlog). The UI works and persists; flipping it just doesn't change actual citizen behaviour yet.
+
+### 15e. Empathy rework + multilingual + UI cleanup (commit `8f20df8`)
+
+User feedback led to three substantive fixes:
+
+1. **IntakeSettings UI alignment** — V1 was showing "Default" + "Live" badges simultaneously, making it ambiguous which one meant "currently in production". Removed the "Default" badge entirely; "Live" is now the single source of truth (green pill with dot, slightly more prominent). After save, the client uses the server's confirmed `body.version` instead of optimistic target, AND triggers `router.refresh()` so the SSR-fetched `currentVersion` prop stays in sync.
+
+2. **Any language, not just te/Tinglish/en** — System prompt rewritten to explicitly accept Telugu, Hindi, Tamil, Kannada, Marathi, Urdu, English plus any code-mixed form (Tinglish, Hinglish, Tamlish). LLM detects per turn and replies in the same language and script. `IntakeResponse.language` is now a free-form BCP-47-ish string instead of a 4-value enum. Normalisation accepts anything short and ASCII-ish.
+
+3. **Empathy-first tri-state scope** — biggest rework. Replaced binary `outOfScope` with `scopeAssessment: 'in_scope' | 'needs_review' | 'out_of_scope'`. New PERSONA section in the prompt: caring friend and community helper, not a customer-service bot. Acknowledge feelings first. Default to `needs_review` when uncertain rather than denying upfront. Explicit examples in the prompt list cases that should default to `needs_review` NOT `out_of_scope` — DV with police inaction, family land disputes with possible encroachment, bank fraud, wage non-payment. Out-of-scope replies still go through `politeDecline` templates from `TENANT_CONFIG.civicScope` as a fallback. Backward-compat: `outOfScope` + `outOfScopeReason` fields still populated (derived) so any consumer keeps working.
+
+Lab UI:
+- Inspector now shows `Scope` + `Scope reason` instead of binary `outOfScope`.
+- Conversation bubbles render three distinct badges: amber (OOS), info-blue (needs_review), green (ready_to_file).
+- New example chips: Hindi ration, DV-with-FIR-refusal (needs_review), family-land-grab (needs_review), pure-personal relationship (true OOS). Old over-aggressive OOS examples removed.
+
+### 15f. Product scope re-prioritisation + PRD §17 + backlog setup (this commit)
+
+User directives:
+1. **Park multimodal** for post-launch. PRD §17.1 documents the deferral; `IntakeRequest.media` contract stays so wiring is non-breaking later.
+2. **Image attachments** to Supabase Storage with inline ticket preview is now pre-launch scope (PRD §17.2). Visibility gate matches the citizen-contact reveal.
+3. **Amplify** must accept worker notes + image attachments as draft sources (PRD §17.3). Audit log tracks which sources were used.
+4. **Backlog management** — created `docs/project-management/backlog.md` (canonical markdown) + `linear-import-2026-05-14.csv` (Linear-ready, 58 issues across 8 epics: E1 Image Attachments, E2 Amplify From Notes, E3 W2-D3 Webhook Wiring, E4 JTG Production Launch, E5 Geographic Data Completion, E6 Post-Launch Hardening, E7 Multimodal Intake (parked), E8 AWS Migration (parked)). To be updated at the end of every session.
+
+PRD §17 captures the running log of sprint scope adjustments — append-only so we can trace decision history later.
+
+### Commits in this session window
+
+- `cef6360` — docs: lock Path A (Supabase Cloud + Vercel for JTG soft-launch)
+- `997f21b` — feat(intake-lab): LLM intake conversation manager + admin sandbox (W2-D1)
+- `dce594a` — fix(intake-lab): assistant bubble contrast
+- `5896163` — feat(intake-settings): runtime V1↔V2 toggle (W2-D1.5, migration 006)
+- `8f20df8` — fix(intake): empathy-first scope + any-language + cleaner settings UI
+
+### Pending / carry-forward
+
+- **Apply migration 006** against Supabase (user action). Until then, `/admin/intake-settings` save errors with column-not-found.
+- **E1 Image Attachments** is the next active EPIC. ~3 days.
+- **E2 Amplify From Notes** parallel-trackable, ~2 days.
+- **E3 W2-D3 webhook wiring** unlocks V2 actually being used in production. ~1.5 days.
+- **E4 JTG Production Launch** = the W3 cluster. ~5 days.
+- `alert.wav` on prod still possibly 404 (last checked 2026-05-13). Verify on next session start.
+
+### Backlog discipline (going forward)
+
+End-of-session ritual:
+1. Move completed stories out of `backlog.md` tables.
+2. Add the commit hash next to each completed item in this PROJECT_SUMMARY session log.
+3. Add newly identified work to `backlog.md` with status Todo or Backlog.
+4. Regenerate `linear-import-YYYY-MM-DD.csv` from the latest backlog.
+5. Commit both together.
