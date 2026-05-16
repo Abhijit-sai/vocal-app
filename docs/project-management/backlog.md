@@ -1,13 +1,14 @@
 # My Leader — Backlog
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-16
 **Maintenance rule:** updated at the end of every session. Newly identified work
 goes in. Completed work moves to `PROJECT_SUMMARY.md` §14+ as a session log and
 is removed from this file.
 
-This is the canonical upcoming-work backlog. The Linear-importable CSV at
-`linear-import-2026-05-14.csv` is regenerated from this file every session —
-import it into Linear when you want a fresh sync.
+This is the canonical upcoming-work backlog. The Linear-importable CSVs in this
+folder are dated snapshots — pick the latest, OR import the per-session delta
+(`linear-import-2026-05-16.csv` adds only the items new since the 2026-05-14
+import).
 
 ---
 
@@ -16,14 +17,18 @@ import it into Linear when you want a fresh sync.
 ```
 EPIC                                 status     priority    rough effort
 ────────────────────────────────────────────────────────────────────────
-E1. Image attachments                Active     High        ~3 days
-E2. Amplify from notes & attachments Active     High        ~2 days
-E3. W2-D3 — V2 webhook wiring        Active     High        ~1.5 days
-E4. W3 — JTG production launch       Next       Urgent      ~5 days
-E5. Geographic data completion       Next       Medium      Incremental
-E6. Post-launch hardening            Backlog    Medium      ~2 weeks
-E7. Multimodal intake (parked)       Parked     Low         ~5 days
-E8. Infrastructure migration to AWS  Parked     Medium      ~3-5 days
+E1.  Image attachments               Active     High        ~3 days
+E2.  Amplify from notes & attachments Active    High        ~2 days
+E3.  W2-D3 — V2 webhook wiring       Active     High        ~1.5 days
+E4.  W3 — JTG production launch      Next       Urgent      ~5 days
+E5.  Geographic data completion      Next       Medium      Incremental
+E6.  Post-launch hardening           Backlog    Medium      ~2 weeks
+E7.  Multimodal intake (parked)      Parked     Low         ~5 days
+E8.  Infrastructure migration to AWS Parked     Medium      ~3-5 days
+E9.  WhatsApp channel (NEW)          Backlog    Medium      ~2 weeks
+E10. Citizen-facing app (NEW)        Discovery  Low         ~6-8 weeks
+E11. Karyakarta-as-reporter (NEW)    Backlog    Medium      ~3-5 days
+E12. Configurable SLAs (NEW)         Backlog    High        ~3-5 days
 ```
 
 ---
@@ -126,8 +131,7 @@ E8. Infrastructure migration to AWS  Parked     Medium      ~3-5 days
 | E6-S6 | Reports CSV / XLSX export                                      | Backlog  | 3        | All report views downloadable. Audit-logged. |
 | E6-S7 | Worker leaderboards on /reports                                | Backlog  | 3        | Resolution count, avg time-to-resolution, acceptance ratio. |
 | E6-S8 | Mobile-responsive tables (/tickets, /triage, /workers)         | Backlog  | 3        | Card-view at <md breakpoint. |
-| E6-S9 | WhatsApp adapter (channel-agnostic — leverages V2)             | Backlog  | 8        | Gupshup or Wati BSP. Adapter plugs into intakeConversationManager. |
-| E6-S10| Apply migration 006 + verify V1↔V2 switch in production        | Todo     | 1        | User action: paste 006 SQL into Supabase SQL editor. |
+| E6-S9 | Apply migration 006 + verify V1↔V2 switch in production        | Todo     | 1        | User action: paste 006 SQL into Supabase SQL editor. (Was E6-S10; renumbered after WhatsApp moved to E9.) |
 
 ---
 
@@ -158,11 +162,93 @@ E8. Infrastructure migration to AWS  Parked     Medium      ~3-5 days
 
 ---
 
+## E9 — WhatsApp channel (Backlog · Medium · ~2 weeks)
+
+**Why:** PRD §17.5.1. We want citizens to reach the system on the channel they already use most. Twilio is the preferred BSP for speed (hours to set up, mature SDK) — Wati / Gupshup if India-billing or business-verification handholding matters more. The new `intakeConversationManager` is channel-agnostic by design, so the adapter is mostly Telegram-shaped plumbing.
+
+| ID    | Story                                                          | Status   | Estimate | Notes |
+|-------|----------------------------------------------------------------|----------|----------|-------|
+| E9-S1 | Procure WhatsApp Business number (Twilio preferred, Wati alt)  | Todo     | 2        | Sandbox phone-number first for demo; production number requires Meta business verification (1-2 weeks). Decision: Twilio for speed, switch later if needed. |
+| E9-S2 | WhatsApp adapter — webhook + send-message helpers              | Backlog  | 5        | `services/whatsappService.ts` mirroring `telegramService.ts` (sendMessage, downloadMedia, secret validation). New `app/api/webhooks/whatsapp/route.ts`. |
+| E9-S3 | Plug adapter into `intakeConversationManager`                  | Backlog  | 3        | Reuse V2 pipeline. Channel = 'whatsapp' on `channel_conversations.channel`. Same `metadata_json.history[]` shape. |
+| E9-S4 | Message template approvals (Meta-mandatory)                    | Backlog  | 2        | Approved templates for: ticket-created, ticket-accepted, citizen-contacted, resolved, awaiting-response. Templates submitted via Twilio dashboard. |
+| E9-S5 | Initial demo testing on real WhatsApp numbers                  | Backlog  | 2        | Internal team uses the demo number to file test tickets end-to-end. |
+| E9-S6 | Production cutover decision                                    | Backlog  | 1        | Run WhatsApp + Telegram in parallel? WhatsApp-only? Capture in PRD §17 update once tested. |
+
+---
+
+## E10 — Citizen-facing app (Discovery · Low · ~6-8 weeks)
+
+**Why:** PRD §17.5.2. Originally Phase 3 in §6.4. Brought forward into the backlog so we can begin discovery. NOT in pre-launch scope. Telegram + WhatsApp keep being primary intake for a long time before an app makes sense — but having structured backlog gives us a discovery north star.
+
+| ID     | Story                                                          | Status   | Estimate | Notes |
+|--------|----------------------------------------------------------------|----------|----------|-------|
+| E10-S1 | Product discovery — MVP scope definition                       | Discovery| 3        | What does the citizen app DO that Telegram can't? Photo capture? Offline draft? Status notifications? Map view? Pin actual address? Discovery output: 1-page brief. |
+| E10-S2 | Tech-stack decision (React Native / Flutter / PWA)             | Backlog  | 2        | React Native is the safe bet (cross-platform, shares JS with our Next.js team). Flutter is a fresh codebase. PWA is no app stores but worse push-notifications. |
+| E10-S3 | Citizen auth — phone OTP                                       | Backlog  | 5        | Currently citizens are chat-identity-only (no app login). App needs proper auth. Clerk supports phone OTP. Bind to the same `citizens` table. |
+| E10-S4 | API surface for citizen actions                                | Backlog  | 5        | New `/api/citizen/*` routes (auth via citizen JWT, NOT staff Clerk): file ticket, attach media, check status, list past tickets, get notifications. |
+| E10-S5 | MVP build — issue reporting + status check                     | Backlog  | 13       | Two screens: New Issue (form + photo + voice + location), My Tickets (list + status). Polished but minimal. |
+| E10-S6 | App store + Play store submission                              | Backlog  | 5        | Privacy policy, store listing, screenshots, review cycles. 1-2 weeks elapsed for first approval. |
+| E10-S7 | Initial cohort rollout                                         | Backlog  | 3        | Same staged-rollout pattern as the Telegram bot: 50 users → 500 → general. |
+
+---
+
+## E11 — Karyakarta-as-reporter (Backlog · Medium · ~3-5 days)
+
+**Why:** PRD §17.5.3. Currently workers only ACCEPT and RESOLVE issues that come from citizens via Telegram. Ground-truth says workers see issues every day that citizens don't bother reporting (broken streetlight on a side road, a stalled welfare claim a worker visited). They need to be able to file these themselves. Routing logic differs from citizen-filed tickets — worker-filed go to triage (not auto-assigned to the same worker, which would be a conflict of interest).
+
+| ID     | Story                                                          | Status   | Estimate | Notes |
+|--------|----------------------------------------------------------------|----------|----------|-------|
+| E11-S1 | "Report an issue" CTA on the worker dashboard                  | Todo     | 1        | Floating action button on `/my-assignments`. Opens a new-issue modal. |
+| E11-S2 | New-issue form — title / description / location / category / photos | Todo     | 3   | Reuse the existing ticket creation service. Distinction: `source_channel = 'worker_report'` on the ticket. |
+| E11-S3 | API: `POST /api/tickets/worker-report`                         | Todo     | 2        | Role-gated to ground_worker (any role can use it actually — but worker is the canonical case). Sets `created_by` to the worker. Sets `needs_triage = true` (do NOT auto-assign back to the reporter). |
+| E11-S4 | Triage queue distinction — worker-reported badge               | Todo     | 1        | Small "Worker report" badge in `/triage` so central support can prioritise these (often higher-trust signal). |
+| E11-S5 | Audit + access-control — worker can't self-assign their report | Todo     | 1        | Enforce at API layer + UI. Reporter shouldn't appear in the assignment dropdown for their own ticket. |
+| E11-S6 | Reporting / dashboard: worker-sourced vs citizen-sourced split | Backlog  | 2        | KPI on `/reports`: % of tickets sourced from workers vs citizens. Insight into ground-team proactivity. |
+
+---
+
+## E12 — Configurable SLAs (Backlog · High · ~3-5 days)
+
+**Why:** PRD §17.5.4. Currently SLAs are hard-coded in `organization_settings` (acceptance, first-contact, resolution). They need to be:
+1. Editable from a SuperAdmin UI without a redeploy.
+2. Expanded — a new "meeting/visit" SLA between first-contact and resolution. Some tickets need a physical visit to verify.
+3. Validated — acceptance <= first_contact <= meeting <= resolution.
+
+| ID     | Story                                                          | Status   | Estimate | Notes |
+|--------|----------------------------------------------------------------|----------|----------|-------|
+| E12-S1 | Migration 007 — add `sla_meeting_hours` to organization_settings | Todo   | 1        | Default 12h. Same shape as the other SLA columns. Plus `sla_breach_alerts_enabled` boolean. |
+| E12-S2 | Plumb the new column through ticket-acceptance + reports        | Todo    | 2        | When a worker accepts, compute `sla_meeting_due_at` alongside the other SLA timestamps. Worker UI shows the meeting countdown. |
+| E12-S3 | SuperAdmin SLA-settings UI page                                 | Todo    | 3        | `/admin/sla-settings` — number inputs for each SLA + Save. Validation (each step must be >= the previous). Audit log on every change. |
+| E12-S4 | Per-category SLA overrides (optional, Phase 2)                  | Backlog | 5        | `Critical` severity gets tighter SLAs. JSON column or a separate table. Defer until we have data on which category-SLA mismatches actually matter. |
+| E12-S5 | SLA breach behaviour config — escalation + alert recipients     | Backlog | 3        | Currently breach just sets `sla_breached_flag`. Extend to also notify a configurable list (state_leader, district_leader, escalation channel). |
+
+---
+
 ## Issues / risks tracking
 
 - **alert.wav on prod was 404** at last manual check (2026-05-13). Vercel deploys since then should have refreshed; verify on next session start. If still missing, inline as a base64 data URL in the React component.
 - **Migration 006** is shipped as code but the user needs to apply it manually against Supabase. Until then, the `/admin/intake-settings` Save button errors with column-not-found.
 - **Stray `images/` folder** at repo root contains April screenshots — untracked, never committed. Delete locally when convenient.
+
+---
+
+## Scope reference — what kinds of issues this platform addresses
+
+Confirmed 2026-05-16: the platform's civic-scope already covers the issue
+themes the org cares about, including opposition-angle topics. No code
+change needed; this note exists so future Claude sessions know not to
+narrow scope.
+
+The included categories in `TENANT_CONFIG.civicScope.included` and the
+LLM intake prompt support:
+
+- **General civic** — drainage, potholes, waterlogging, garbage, streetlights, traffic, public transport, drinking water, electricity, ration cards, pensions, housing schemes, FIR refusal, women safety, cybercrime, stray dogs, lake pollution, jobs/TGPSC delays
+- **Opposition-angle / governance accountability** — welfare funds not reaching beneficiaries, government hospital service gaps, environmental/nature degradation, land grabbing and *kabja* (encroachment), municipality negligence (GHMC complaints), HYDRAA demolitions, contractor accountability, corruption / bribery by public officials
+
+The Amplify campaign tones (`activist`, `opposition`, `public_shame` from
+migration 005) already produce post-ready draft content for the
+opposition-framing use cases.
 
 ---
 

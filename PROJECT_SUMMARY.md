@@ -81,12 +81,34 @@ to confirm we're still on Supabase Cloud for the JTG soft-launch.
   pre-launch scope (EPIC E2). Central support can pick worker notes
   and citizen photos when generating campaign drafts.
 
-**Backlog management.** Two new artefacts in `docs/project-management/`:
-- `backlog.md` — canonical upcoming-work backlog organised into 8 epics
-  (E1-E8) with story tables. Updated at the end of every session.
-- `linear-import-2026-05-14.csv` — Linear-ready CSV with all 58
-  upcoming stories. Re-generated per session when the backlog shifts.
-  Import into Linear for visual project tracking.
+**Backlog management.** Artefacts live in `docs/project-management/`:
+- `backlog.md` — canonical upcoming-work backlog, updated at the end of
+  every session. Now organised into **12 epics**: E1-E8 from 2026-05-14
+  plus E9-E12 added 2026-05-16 (see §16).
+- `linear-import-2026-05-14.csv` — initial 58-story snapshot.
+- `linear-import-2026-05-16.csv` — delta of 24 new stories added on
+  2026-05-16 (E9-E12). Import this on top of the 14th import to avoid
+  duplicate rows.
+
+**2026-05-16 — four new feature epics captured (no code).** PRD §17.5
+documents the additions. Backlog adjusted:
+- 🟦 **E9 WhatsApp channel** — procure a Twilio (or Wati) WhatsApp
+  Business number for demo testing now; full adapter post-launch. The
+  V2 intake manager is already channel-agnostic so the adapter is
+  mostly plumbing. (Moved out of the old E6-S9 catch-all.)
+- 🟦 **E10 Citizen-facing app** — discovery status. Was PRD Phase 3,
+  brought into the active backlog. React Native default; Clerk
+  phone-OTP for citizen auth.
+- 🟦 **E11 Karyakarta-as-reporter** — workers gain ability to file
+  tickets themselves. Worker-filed tickets always route to triage
+  (cannot self-assign). New `source_channel='worker_report'`.
+- 🟦 **E12 Configurable SLAs** — SuperAdmin UI for tuning SLA windows
+  + a new "meeting/visit" SLA between first-contact and resolution.
+  Migration 007 pending.
+- 📝 **Civic scope confirmation** — opposition-angle topics (welfare
+  funds, govt hospitals, kabja, municipality, nature) are already in
+  the included list. Amplify campaign tones already produce post-ready
+  drafts. No code change.
 
 Current state at resumption:
 
@@ -1250,3 +1272,49 @@ End-of-session ritual:
 3. Add newly identified work to `backlog.md` with status Todo or Backlog.
 4. Regenerate `linear-import-YYYY-MM-DD.csv` from the latest backlog.
 5. Commit both together.
+
+
+---
+
+## 16. 2026-05-16 session — Four new feature epics captured for future build
+
+Planning-only session. No code shipped. Four new feature directives from the user were captured into the backlog and the PRD; the engineering work itself is queued for after the W1-W3 sprint completes.
+
+### 16a. Four new epics added to `docs/project-management/backlog.md`
+
+| Epic | Focus | Status | Priority | Effort |
+|------|-------|--------|----------|--------|
+| E9   | WhatsApp channel — Twilio or Wati for demo testing, full adapter post-launch | Backlog | Medium | ~2 weeks |
+| E10  | Citizen-facing app — was PRD Phase 3, brought forward to Discovery | Discovery | Low | ~6-8 weeks |
+| E11  | Karyakarta-as-reporter — workers can file tickets themselves | Backlog | Medium | ~3-5 days |
+| E12  | Configurable SLAs — SuperAdmin UI + new meeting/visit SLA + migration 007 | Backlog | High | ~3-5 days |
+
+### 16b. Civic-scope reaffirmation
+
+The user clarified that the platform should serve both generic civic complaints AND opposition-framing issues (welfare funds not reaching beneficiaries, government hospital service gaps, environmental/kabja issues, municipality negligence). Confirmed these are already covered in `TENANT_CONFIG.civicScope.included` and that the Amplify campaign tones (`activist`, `opposition`, `public_shame` from migration 005) already produce post-ready drafts for opposition-style use cases. **No code change.** Note added to backlog.md scope-reference section.
+
+### 16c. Refactor in the backlog
+
+- Moved the old `E6-S9 WhatsApp adapter` story OUT of E6 (post-launch hardening) and into the new dedicated **E9 WhatsApp channel** epic. E6 renumbered: old E6-S10 (apply migration 006) is now E6-S9.
+- Old E8 (AWS migration) kept as Parked.
+- E1-E5 active/next priorities unchanged.
+
+### 16d. PRD update
+
+`D:\Develop\Vocal\Planning\Vocal_PRD.md` — appended §17.5 with sub-sections 17.5.1 through 17.5.5 covering the four new epics plus the civic-scope confirmation. PRD now has a chronological "Sprint Scope Adjustments" log from §17.1 through §17.5.
+
+### 16e. CSV for Linear
+
+Created `docs/project-management/linear-import-2026-05-16.csv` containing only the **delta** — 24 new stories across the four new epics. Import this on top of the previous 2026-05-14 import (58 stories) to avoid duplicates. Total backlog if both imports applied: 82 issues.
+
+### Commits in this session
+
+- (this commit) — `docs: 4 new epics (E9-E12) + PRD §17.5 + delta CSV`
+
+### Pending / carry-forward (unchanged from §15 unless noted)
+
+- **Apply migration 006** against Supabase (user action). Still pending.
+- **E1 Image Attachments** remains the next active engineering work.
+- **E12-S1 migration 007** (new SLA columns) will need to be applied alongside 006 whenever the user has a Supabase admin window.
+- `alert.wav` 404 — verify on next session start.
+- **No engineering code touched this session** — pure backlog grooming.
