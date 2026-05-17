@@ -90,29 +90,47 @@ to confirm we're still on Supabase Cloud for the JTG soft-launch.
   2026-05-16 (E9-E12). Import this on top of the 14th import to avoid
   duplicate rows.
 
-**2026-05-17 — E1 image attachments shipped + E1b worker note-upload + V2 rethink paused.**
-See §17 for the full log. Top things that changed today:
-- ✅ **E1 SHIPPED:** Supabase Storage bucket `ticket-attachments`,
-  Telegram→bucket pipeline in `services/attachmentService.ts`, inline
-  thumbnails in ticket detail with visibility gate, backfill script.
-  Commit `f49206a`.
-- ✅ **E1b SHIPPED:** Workers can now attach photos to any note via the
-  Add Note form on the ticket detail page. Uses the same bucket +
-  visibility rules. Single multipart POST. Commit (this session).
+**2026-05-17 — E1 image attachments + E1b worker note-upload SHIPPED and VERIFIED in prod after a real debug saga. V2 rethink paused.**
+See §17 for the full log including the late-day debugging arc. Top things that changed today:
+- ✅ **E1 SHIPPED + VERIFIED:** Supabase Storage bucket
+  `ticket-attachments`, Telegram→bucket pipeline, inline thumbnails
+  in ticket detail with visibility gate.
+- 🐛 **MIME bug discovered + fixed (commit `570c9e9`).** Telegram's
+  `photo` struct has NO `mime_type` field, so every uploaded photo
+  was falling back to `application/octet-stream`, which isn't in the
+  bucket's MIME allowlist → Storage rejected → fell through to
+  legacy pointer. Fix: `pickMedia` now hard-codes `image/jpeg` for
+  photos (Telegram always converts server-side), and a new
+  `inferMime()` safety net walks `hint → file_path extension →
+  magic-byte sniff` for any future edge case. User confirmed working
+  end-to-end after deploy.
+- ✅ **E1b SHIPPED:** Workers can attach photos to any note via the
+  Add Note form on the ticket detail page. Single multipart POST.
+  Same bucket + visibility rules.
 - 🔍 **Diagnostic:** `/api/admin/storage/diagnose` (super_admin only)
-  reports bucket state, env presence, legacy-pointer count, and runs a
-  round-trip upload-and-delete test. Use this to debug if image
-  uploads silently fail. Logs in `attachmentService` were also
-  upgraded to `console.error` with structured payloads for Vercel
-  function-log visibility.
-- ⏸ **E3 V2 webhook wiring PAUSED.** User found the V2 LLM
-  conversation quality not up to the mark in the intake lab; we'll
-  rethink design (tone, follow-up selection, scope thresholds, model
-  A/B) before wiring V2 into the live citizen webhook. V1 (rigid
-  state machine) remains the production intake path. No soft-launch
-  risk — V2 was always behind a toggle.
+  is now the canonical first-stop for image-upload issues. Reports
+  bucket state, env presence, most-recent legacy pointer details,
+  Storage-only round-trip test, AND a full Telegram→Storage pipeline
+  probe against the most-recent legacy `file_id`.
+- 📊 **Observability:** `[attachmentService]` and `[telegramFlow]`
+  `console.error` lines now appear in Vercel function logs for every
+  upload — per-file timing, MIME inference results, structured FAIL
+  payloads. The MIME bug was found via these logs in <5 minutes.
+- ⏸ **E3 V2 webhook wiring PAUSED.** User found V2 LLM conversation
+  quality not up to the mark in the intake lab; will rethink design
+  (tone, follow-up selection, scope thresholds, model A/B) before
+  wiring V2 into the live citizen webhook. V1 (rigid state machine)
+  remains the production intake path. Zero soft-launch risk — V2 was
+  always behind a toggle.
 - 📝 **Backfill of pre-E1 legacy `telegram:<file_id>` pointers is NOT
   being pursued.** Old test tickets stay as `📦 Pending upload` tiles.
+  6 such rows exist in the demo DB — all from before commit `570c9e9`.
+- 🐛 **Bug pattern noted for future:** Vercel serverless kills
+  in-flight promises after function return. Always `await`
+  side-effects before returning the response from a serverless route.
+  (We hit this in §14f with `notifyWorkerOfAssignment` and applied
+  the same fix prophylactically to attachments in §17 — turned out
+  attachments wasn't this bug, but the await is still correct hygiene.)
 
 **2026-05-16 — four new feature epics captured (no code).** PRD §17.5
 documents the additions. Backlog adjusted:
@@ -1401,3 +1419,71 @@ E3 status in `backlog.md` changed from `Active` to `PAUSED`. The original story 
 
 - `f49206a` — `feat(E1): image attachments — Supabase Storage + ticket preview`
 - (this commit) — `feat(E1b): worker note-with-image upload + storage diagnostic + V2 pause`
+
+
+### 17f. Late-day debug: Telegram photos silently failing → MIME bug found and fixed
+
+After E1 + E1b shipped, user did a real-world test with photos sent through `@Bevocal_bot`. Photos kept landing as legacy `telegram:<file_id>` pointers — never reaching the bucket. Worker note uploads (E1b) worked fine — only the citizen Telegram path was broken.
+
+**Two false starts before the real bug surfaced:**
+
+1. **First hypothesis — Vercel killing in-flight promises.** Commit `48f2694` made the media upload `await`-ed (instead of fire-and-forget) and reordered so the citizen reply went out first. This was a real bug pattern (we'd hit it before with `notifyWorkerOfAssignment` in §14f) but it turned out NOT to be the cause here.
+
+2. **Second hypothesis — code not deployed.** Built diagnostic v2 (`/api/admin/storage/diagnose`) with a full Telegram → Storage pipeline probe (commit `3f70b6f`). The probe successfully uploaded the exact same `file_id` that the webhook had just failed on. So the deployed code worked — just not from inside the webhook context.
+
+3. **Per-file logging** (commit `2256199`) finally surfaced the truth from Vercel function logs:
+
+   ```
+   [attachmentService] FAIL: Supabase Storage upload error
+   {"mime":"application/octet-stream","error":"mime type application/octet-stream is not supported"}
+   ```
+
+**Root cause:** Telegram's `photo` message structure has **no `mime_type` field** — only `voice`, `video`, and `document` do. The `pickMedia()` helper in `app/api/webhooks/telegram/route.ts` was leaving the MIME unset for photos. Telegram's CDN also doesn't return a usable `Content-Type` header. So `downloadFromTelegramAndStore` fell back to `'application/octet-stream'`, which is NOT in the bucket's MIME allowlist. Storage rejected the upload, the function returned null, the fallback wrote a legacy pointer. **Every Telegram photo was hitting this.** The diagnostic worked because I'd hard-coded `mime_hint: 'image/jpeg'` in the probe call, accidentally bypassing the bug.
+
+**Fix (commit `570c9e9`) — two-layer:**
+
+1. **`pickMedia` in the webhook** now sets `mime_type: 'image/jpeg'` for the photo case. Telegram converts every uploaded photo to JPEG server-side, so this is always accurate.
+2. **`inferMime()` safety net in `attachmentService`** for future edge cases. Walks: hint → file extension from Telegram's `file_path` → magic-byte sniff (JPEG `FFD8FF`, PNG `89504E47`, WebP `RIFF…WEBP`, GIF87a/GIF89a, PDF `%PDF`). Returns null only when all three fail, and logs the first 8 hex bytes for debugging instead of silently uploading garbage MIME.
+
+**Verified working** by the user after deploy of `570c9e9`. New Telegram photo uploads now land cleanly at `org/<org_id>/ticket/<ticket_id>/<uuid>.jpg` in the bucket.
+
+### 17g. E1 + E1b — fully closed
+
+- **E1 (image attachments)** — all 5 active stories shipped; backfill not pursued (user decision); retention cron deferred.
+- **E1b (worker note-with-image)** — all 5 stories shipped.
+- **Diagnostic and observability** — `/api/admin/storage/diagnose` lives and is the canonical health check. `[attachmentService]` and `[telegramFlow]` `console.error` lines appear in Vercel function logs for every upload.
+
+### 17h. Decisions captured this session (full list)
+
+| Decision | Direction |
+|---|---|
+| Backfill of pre-E1 legacy attachments | NOT pursuing — old test tickets stay as Pending-upload tiles |
+| V2 LLM intake conversation quality | Re-think before wiring into webhook. Park until prompt + model are validated. (E3 PAUSED) |
+| Worker upload path | Multipart POST through existing notes endpoint |
+| Storage diagnostics | `/api/admin/storage/diagnose` is the canonical first stop |
+| Logging in attachmentService | `console.error` with structured JSON. Vercel function logs are debug surface |
+| Telegram photo MIME handling | Hard-coded `image/jpeg` in pickMedia (always JPEG server-side). Safety net via `inferMime()` for future edge cases |
+
+### Commits in this session window (chronological)
+
+- `f49206a` — `feat(E1): image attachments — Supabase Storage + ticket preview`
+- `97895ee` — `feat(E1b): worker note-with-image upload + storage diagnostic + pause E3`
+- `48f2694` — `fix(E1): await Telegram media upload — was being killed by Vercel before completing` *(turned out not to be the real bug, but the await is still correct hygiene)*
+- `3f70b6f` — `diag: add full Telegram→Storage pipeline probe to /api/admin/storage/diagnose`
+- `2256199` — `diag: per-file structured logging in fileTicket media-upload block`
+- `570c9e9` — `fix(E1): Telegram photos rejected by bucket — MIME hint + inference safety net` *(the real fix)*
+
+### Pending / carry-forward into the next session
+
+- **Migration 006** still pending application against Supabase (V1↔V2 toggle column). Independent of E1; can wait until V2 work resumes.
+- **E2 Amplify-from-notes** is the next active engineering work — naturally builds on E1's signed-URL plumbing.
+- **E3 V2 webhook wiring** remains PAUSED pending the conversation-quality rethink.
+- **alert.wav 404** on prod — verify on next session start; if still missing, fall back to base64 data URL.
+
+### What's solid in the E1 stack now
+
+- ✅ Citizen sends photo via Telegram → lands in Supabase Storage with correct MIME
+- ✅ Worker uploads photo via Add Note → lands in Supabase Storage
+- ✅ Ticket detail page renders both inline with the visibility gate
+- ✅ Diagnostic endpoint surfaces any health issues (bucket, env, legacy pointers, full pipeline)
+- ✅ Vercel logs surface failures with structured payloads

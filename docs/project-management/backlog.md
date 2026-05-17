@@ -17,8 +17,11 @@ import).
 ```
 EPIC                                 status     priority    rough effort
 ────────────────────────────────────────────────────────────────────────
-E1.  Image attachments               SHIPPED 2026-05-17 (E1-S6 retention deferred)
+E1.  Image attachments               SHIPPED + VERIFIED 2026-05-17 (E1-S6 retention deferred)
 E1b. Worker note-with-image          SHIPPED 2026-05-17 (added per user request)
+     ↳ Late-day MIME bug fix: 570c9e9 (Telegram photo struct has no
+       mime_type → was falling back to octet-stream → bucket rejected.
+       Now pickMedia hard-codes image/jpeg + inferMime safety net.)
 E2.  Amplify from notes & attachments Active    High        ~2 days
 E3.  W2-D3 — V2 webhook wiring       PAUSED     High        ~1.5 days (rethink conv quality first)
 E4.  W3 — JTG production launch      Next       Urgent      ~5 days
