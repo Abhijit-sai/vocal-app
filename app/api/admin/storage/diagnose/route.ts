@@ -17,7 +17,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentVocalUser, createSupabaseServiceClient } from '@/lib/supabase/server'
-import { BUCKET_NAME } from '@/services/attachmentService'
+import { BUCKET_NAME, downloadFromTelegramAndStore } from '@/services/attachmentService'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,13 +75,33 @@ export async function GET() {
     supabase_host: process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/^https?:\/\//, '').split('.')[0] ?? null,
   }
 
-  // ── 3. Legacy pointers count ────────────────────────────────────────────
+  // ── 3. Legacy pointers count + most-recent details ─────────────────────
+  let mostRecentLegacy: { id: string; ticket_id: string; file_id: string; created_at: string } | null = null
   try {
     const { count, error } = await supabase
       .from('ticket_attachments')
       .select('id', { count: 'exact', head: true })
       .like('storage_path', 'telegram:%')
-    out.legacy_pointers = error ? { ok: false, error: error.message } : { ok: true, count: count ?? 0 }
+
+    // Also fetch the single most recent legacy row so we can probe it.
+    const { data: recent } = await supabase
+      .from('ticket_attachments')
+      .select('id, ticket_id, storage_path, created_at')
+      .like('storage_path', 'telegram:%')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (recent) {
+      mostRecentLegacy = {
+        id: recent.id,
+        ticket_id: recent.ticket_id,
+        file_id: recent.storage_path.replace(/^telegram:/, ''),
+        created_at: recent.created_at,
+      }
+    }
+    out.legacy_pointers = error
+      ? { ok: false, error: error.message }
+      : { ok: true, count: count ?? 0, most_recent: mostRecentLegacy }
   } catch (e: any) {
     out.legacy_pointers = { ok: false, error: e?.message ?? String(e) }
   }
@@ -110,6 +130,44 @@ export async function GET() {
     }
   } catch (e: any) {
     out.roundtrip = { ok: false, error: e?.message ?? String(e) }
+  }
+
+  // ── 5. Telegram → Storage end-to-end probe ──────────────────────────────
+  // The round-trip in step 4 only tests Storage. This test goes through
+  // the FULL pipeline: Telegram getFile → download bytes → upload to
+  // bucket. If this fails the way the real-citizen upload fails, we'll
+  // see the exact step that breaks.
+  if (mostRecentLegacy) {
+    try {
+      const probe = await downloadFromTelegramAndStore({
+        file_id: mostRecentLegacy.file_id,
+        org_id: 'diagnose',                 // scratch path, ignored on cleanup
+        ticket_id: '_probe',
+        mime_hint: 'image/jpeg',
+      })
+      if (probe) {
+        // Clean up: delete the probe file from storage; do NOT touch
+        // the legacy row in ticket_attachments.
+        await supabase.storage.from(BUCKET_NAME).remove([probe.storage_path]).then(() => {}, () => {})
+        out.full_pipeline_probe = {
+          ok: true,
+          message: 'Telegram getFile → download → upload succeeded for the most-recent legacy file_id.',
+          probe_path: probe.storage_path,
+          size_bytes: probe.size_bytes,
+          mime: probe.mime_type,
+        }
+      } else {
+        out.full_pipeline_probe = {
+          ok: false,
+          message: 'downloadFromTelegramAndStore returned null. See Vercel function logs (search for [attachmentService]) for the failing step.',
+          tested_file_id: mostRecentLegacy.file_id.slice(0, 32) + '…',
+        }
+      }
+    } catch (e: any) {
+      out.full_pipeline_probe = { ok: false, error: e?.message ?? String(e) }
+    }
+  } else {
+    out.full_pipeline_probe = { ok: 'n/a', message: 'No legacy pointers to probe with.' }
   }
 
   return Response.json(out, { status: 200 })
