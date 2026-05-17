@@ -90,6 +90,30 @@ to confirm we're still on Supabase Cloud for the JTG soft-launch.
   2026-05-16 (E9-E12). Import this on top of the 14th import to avoid
   duplicate rows.
 
+**2026-05-17 — E1 image attachments shipped + E1b worker note-upload + V2 rethink paused.**
+See §17 for the full log. Top things that changed today:
+- ✅ **E1 SHIPPED:** Supabase Storage bucket `ticket-attachments`,
+  Telegram→bucket pipeline in `services/attachmentService.ts`, inline
+  thumbnails in ticket detail with visibility gate, backfill script.
+  Commit `f49206a`.
+- ✅ **E1b SHIPPED:** Workers can now attach photos to any note via the
+  Add Note form on the ticket detail page. Uses the same bucket +
+  visibility rules. Single multipart POST. Commit (this session).
+- 🔍 **Diagnostic:** `/api/admin/storage/diagnose` (super_admin only)
+  reports bucket state, env presence, legacy-pointer count, and runs a
+  round-trip upload-and-delete test. Use this to debug if image
+  uploads silently fail. Logs in `attachmentService` were also
+  upgraded to `console.error` with structured payloads for Vercel
+  function-log visibility.
+- ⏸ **E3 V2 webhook wiring PAUSED.** User found the V2 LLM
+  conversation quality not up to the mark in the intake lab; we'll
+  rethink design (tone, follow-up selection, scope thresholds, model
+  A/B) before wiring V2 into the live citizen webhook. V1 (rigid
+  state machine) remains the production intake path. No soft-launch
+  risk — V2 was always behind a toggle.
+- 📝 **Backfill of pre-E1 legacy `telegram:<file_id>` pointers is NOT
+  being pursued.** Old test tickets stay as `📦 Pending upload` tiles.
+
 **2026-05-16 — four new feature epics captured (no code).** PRD §17.5
 documents the additions. Backlog adjusted:
 - 🟦 **E9 WhatsApp channel** — procure a Twilio (or Wati) WhatsApp
@@ -1318,3 +1342,62 @@ Created `docs/project-management/linear-import-2026-05-16.csv` containing only t
 - **E12-S1 migration 007** (new SLA columns) will need to be applied alongside 006 whenever the user has a Supabase admin window.
 - `alert.wav` 404 — verify on next session start.
 - **No engineering code touched this session** — pure backlog grooming.
+
+
+---
+
+## 17. 2026-05-17 session — E1 image attachments shipped + E1b worker note-upload + V2 paused + diagnostics
+
+### 17a. E1 image attachments — shipped (commit `f49206a`)
+
+All 5 active stories of EPIC E1 landed in one commit:
+- **E1-S1** `scripts/setup-storage-bucket.ts` (`npm run setup:storage-bucket`) — idempotently provisions the private `ticket-attachments` bucket with 25 MB cap and MIME allowlist.
+- **E1-S2** `services/attachmentService.ts` — `downloadFromTelegramAndStore({file_id, org_id, ticket_id, mime_hint})` resolves the Telegram file_id via `getFile`, downloads bytes, uploads to bucket at `org/<org_id>/ticket/<ticket_id>/<uuid>.<ext>`, returns `StoredAttachment` or null. Plus `signedUrlFor()` + `signedUrlsFor()` for short-lived previews.
+- **E1-S3** `services/telegramFlow.ts` now routes the citizen-attached media through the pipeline before inserting `ticket_attachments`. Legacy `telegram:<file_id>` fallback preserves the audit row on upload failure.
+- **E1-S4** `app/(dashboard)/tickets/[id]/page.tsx` — new Attachments section. 2/3/4-col grid. Visibility-gated: privileged roles always; ground_worker only after `citizen_identity_revealed_at`. Workers pre-accept see a "🔒 Hidden until accepted" tile.
+- **E1-S5** `scripts/backfill-telegram-attachments.ts` (`npm run backfill:telegram-attachments`) — for old test tickets with legacy pointers. **Not being pursued** (user decision 2026-05-17).
+- E1-S6 retention cron deferred to backlog.
+
+### 17b. E1b worker note-with-image upload — shipped (this commit)
+
+User feedback: workers needed an upload path of their own. Workers can now attach an image when adding any note via the existing Add Note form on the ticket detail page.
+
+- **E1b-S1** `app/api/tickets/notes/route.ts` now handles either `application/json` (original shape, unchanged) **or** `multipart/form-data` with an optional `image` File. MIME allowlist + 25 MB cap enforced at the endpoint before upload.
+- **E1b-S2** `services/attachmentService.ts` gained a sibling `uploadWorkerAttachment({bytes, filename, mime, org_id, ticket_id})` — same bucket, same path convention. Sets `ticket_attachments.uploaded_by` to the worker.
+- **E1b-S3** `components/tickets/TicketActionsPanel.tsx` — dashed-border "Attach photo (optional)" CTA. Image preview + Remove button. Submit button becomes "Add Note + Photo" when an image is selected. Image errors are non-fatal — note saves either way, UI surfaces the warning.
+- **E1b-S4** `/api/admin/storage/diagnose` (super_admin) — bucket existence check + env-var presence + legacy-pointer count + round-trip upload-and-delete test. Use this when an upload silently fails to figure out which step is broken.
+- **E1b-S5** Upgraded `attachmentService` logging to `console.error` with structured payloads (`file_id`, `ticket_id`, mime, size, error) — surfaces in Vercel function logs so diagnoses are possible from the deploy dashboard.
+
+### 17c. E3 V2 webhook wiring — PAUSED
+
+User test of the V2 LLM intake in `/admin/intake-lab` found conversation quality not up to the mark. Wiring V2 into the live citizen webhook is paused pending a rethink. Concerns flagged for next iteration:
+- Tone / personality may still feel transactional despite the empathy rework
+- Follow-up question selection feels off — wrong questions, missed signals
+- Out-of-scope vs needs-review thresholds may need clearer guardrails
+- A/B test alternate models (GPT-4o-mini, Claude 3.5 Sonnet via OpenRouter)
+
+**Soft-launch impact: zero.** V1 (the rigid state machine) was always the default; V2 was always behind the `intake_conversation_version` toggle in `organization_settings`. The toggle UI still works (after migration 006); flipping to V2 is a no-op until the wiring lands, which is exactly what we want during the rethink.
+
+E3 status in `backlog.md` changed from `Active` to `PAUSED`. The original story table is preserved so when we resume, the plan is intact.
+
+### 17d. Decisions captured
+
+| Decision | Direction |
+|---|---|
+| Pre-E1 legacy `telegram:<file_id>` attachments | NOT backfilling. Old test tickets stay as Pending-upload tiles. |
+| V2 LLM intake conversation quality | Re-think before wiring into webhook. Park until prompt + model are validated. |
+| Worker upload path | Multipart POST through the existing notes endpoint. Single user action — no separate uploader. |
+| Storage diagnostics | Lives at `/api/admin/storage/diagnose`, super_admin only. Use this first when image issues are reported. |
+| Logging in attachmentService | `console.error` with structured JSON payloads. Vercel function logs are the canonical debug surface. |
+
+### 17e. Pending / carry-forward
+
+- **User must run `npm run setup:storage-bucket`** against the demo Supabase project before E1 actually does anything in prod. After the next deploy, hit `https://vocal-app-one.vercel.app/api/admin/storage/diagnose` (signed in as super_admin) to verify bucket + write perms.
+- **Migration 006** still pending application against Supabase (V1↔V2 toggle column). Independent of E1; can wait until V2 work resumes.
+- E2 Amplify-from-notes is the next active engineering work — naturally builds on E1's signed-URL plumbing.
+- **alert.wav 404** on prod was last verified 2026-05-13; status now unknown after the multiple deploys since.
+
+### Commits in this session
+
+- `f49206a` — `feat(E1): image attachments — Supabase Storage + ticket preview`
+- (this commit) — `feat(E1b): worker note-with-image upload + storage diagnostic + V2 pause`

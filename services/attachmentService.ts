@@ -104,8 +104,18 @@ export async function downloadFromTelegramAndStore(args: {
   ticket_id: string
   mime_hint?: string | null
 }): Promise<StoredAttachment | null> {
+  const log = (msg: string, extra?: Record<string, unknown>) => {
+    // Always log at error level so it surfaces in Vercel function logs and
+    // we can diagnose silent upload failures.
+    console.error(`[attachmentService] ${msg}`, JSON.stringify({
+      file_id: args.file_id?.slice(0, 16) + '…',
+      ticket_id: args.ticket_id,
+      ...(extra ?? {}),
+    }))
+  }
+
   if (!TELEGRAM_BOT_TOKEN) {
-    console.warn('[attachmentService] TELEGRAM_BOT_TOKEN missing; cannot resolve file_id')
+    log('FAIL: TELEGRAM_BOT_TOKEN env var missing in runtime')
     return null
   }
 
@@ -119,12 +129,13 @@ export async function downloadFromTelegramAndStore(args: {
     )
     clearTimeout(timeout)
     if (!metaResp.ok) {
-      console.warn('[attachmentService] getFile failed:', metaResp.status)
+      const body = await metaResp.text().catch(() => '')
+      log('FAIL: Telegram getFile HTTP error', { status: metaResp.status, body: body.slice(0, 200) })
       return null
     }
     const metaJson = await metaResp.json() as TelegramGetFileResult
     if (!metaJson.ok || !metaJson.result?.file_path) {
-      console.warn('[attachmentService] getFile not ok:', metaJson.description)
+      log('FAIL: Telegram getFile returned not-ok', { description: metaJson.description })
       return null
     }
     const filePath = metaJson.result.file_path
@@ -139,7 +150,7 @@ export async function downloadFromTelegramAndStore(args: {
     )
     clearTimeout(timeout2)
     if (!fileResp.ok) {
-      console.warn('[attachmentService] file download failed:', fileResp.status)
+      log('FAIL: Telegram file download HTTP error', { status: fileResp.status, file_path: filePath })
       return null
     }
     const buffer = Buffer.from(await fileResp.arrayBuffer())
@@ -155,10 +166,17 @@ export async function downloadFromTelegramAndStore(args: {
         upsert: false,
       })
     if (upErr) {
-      console.warn('[attachmentService] upload failed:', upErr.message)
+      log('FAIL: Supabase Storage upload error', {
+        bucket: BUCKET_NAME,
+        path: storagePath,
+        mime,
+        size: buffer.length,
+        error: upErr.message,
+      })
       return null
     }
 
+    log('OK: stored', { path: storagePath, size: buffer.length, mime })
     return {
       storage_path: storagePath,
       mime_type: mime,
@@ -167,7 +185,51 @@ export async function downloadFromTelegramAndStore(args: {
       telegram_file_id: args.file_id,
     }
   } catch (err) {
-    console.warn('[attachmentService] unexpected error:', err instanceof Error ? err.message : err)
+    log('FAIL: unexpected exception', { error: err instanceof Error ? err.message : String(err) })
+    return null
+  }
+}
+
+/**
+ * Worker-initiated upload — receives bytes already in memory (from the
+ * dashboard's add-note form) and writes them to the bucket. Used by
+ * `/api/tickets/notes/upload`. Returns null on any failure.
+ */
+export async function uploadWorkerAttachment(args: {
+  bytes: Buffer | Uint8Array
+  filename: string
+  mime: string
+  org_id: string
+  ticket_id: string
+}): Promise<StoredAttachment | null> {
+  const log = (msg: string, extra?: Record<string, unknown>) => {
+    console.error(`[attachmentService:worker] ${msg}`, JSON.stringify({
+      filename: args.filename,
+      ticket_id: args.ticket_id,
+      ...(extra ?? {}),
+    }))
+  }
+  try {
+    const supabase = createSupabaseServiceClient()
+    const storagePath = buildPath({ org_id: args.org_id, ticket_id: args.ticket_id, mime: args.mime })
+    const buffer = args.bytes instanceof Buffer ? args.bytes : Buffer.from(args.bytes)
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(storagePath, buffer, { contentType: args.mime, upsert: false })
+    if (upErr) {
+      log('FAIL: upload error', { error: upErr.message, mime: args.mime, size: buffer.length })
+      return null
+    }
+    log('OK: uploaded', { path: storagePath, size: buffer.length })
+    return {
+      storage_path: storagePath,
+      mime_type: args.mime,
+      size_bytes: buffer.length,
+      attachment_type: attachmentTypeFromMime(args.mime),
+      telegram_file_id: '',
+    }
+  } catch (err) {
+    log('FAIL: exception', { error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }

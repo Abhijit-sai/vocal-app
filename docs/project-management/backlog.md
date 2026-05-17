@@ -17,9 +17,10 @@ import).
 ```
 EPIC                                 status     priority    rough effort
 ────────────────────────────────────────────────────────────────────────
-E1.  Image attachments               Active     High        ~3 days
+E1.  Image attachments               SHIPPED 2026-05-17 (E1-S6 retention deferred)
+E1b. Worker note-with-image          SHIPPED 2026-05-17 (added per user request)
 E2.  Amplify from notes & attachments Active    High        ~2 days
-E3.  W2-D3 — V2 webhook wiring       Active     High        ~1.5 days
+E3.  W2-D3 — V2 webhook wiring       PAUSED     High        ~1.5 days (rethink conv quality first)
 E4.  W3 — JTG production launch      Next       Urgent      ~5 days
 E5.  Geographic data completion      Next       Medium      Incremental
 E6.  Post-launch hardening           Backlog    Medium      ~2 weeks
@@ -48,6 +49,20 @@ E12. Configurable SLAs (NEW)         Backlog    High        ~3-5 days
 
 ---
 
+## E1b — Worker note-with-image upload (Shipped 2026-05-17)
+
+**Why:** User feedback during E1 testing: workers had no way to upload photos from the field — only citizens (via Telegram) could attach images. Workers should be able to attach an image to any note they add.
+
+| ID     | Story                                                          | Status   | Estimate | Notes |
+|--------|----------------------------------------------------------------|----------|----------|-------|
+| E1b-S1 | Extend `/api/tickets/notes` to accept multipart/form-data      | Done     | 2        | Accepts JSON (existing) or multipart with optional `image` File. JSON path untouched. |
+| E1b-S2 | `uploadWorkerAttachment()` in attachmentService                | Done     | 1        | Sibling of `downloadFromTelegramAndStore()`. Reuses the same bucket + path convention. Sets `ticket_attachments.uploaded_by` to the worker. |
+| E1b-S3 | "Attach photo" picker in the Add Note form                     | Done     | 2        | Dashed-border CTA. Image preview + Remove button. Submit button becomes "Add Note + Photo" when an image is attached. |
+| E1b-S4 | `/api/admin/storage/diagnose` for super_admin diagnostics      | Done     | 2        | Bucket existence, env var presence, legacy-pointer count, round-trip upload-and-delete test. |
+| E1b-S5 | Improved logging in attachmentService                          | Done     | 1        | console.error every stage transition with `file_id, ticket_id, ...` payload. Surfaces in Vercel function logs. |
+
+---
+
 ## E2 — Amplify from notes & attachments (Active · High · ~2 days)
 
 **Why:** PRD §17.3. Central support wants to amplify cases using the worker's field notes and the citizen-uploaded photos, not just the raw complaint text. Currently Amplify only sees `complaint_text` and `normalized_summary`.
@@ -64,9 +79,17 @@ E12. Configurable SLAs (NEW)         Backlog    High        ~3-5 days
 
 ---
 
-## E3 — W2-D3 · Wire V2 into Telegram webhook (Active · High · ~1.5 days)
+## E3 — W2-D3 · Wire V2 into Telegram webhook (Paused · High · ~1.5 days)
 
-**Why:** The toggle exists (`/admin/intake-settings`), the engine exists (`intakeConversationManager`), but the webhook doesn't read the setting yet. Until this lands, flipping V2 in the UI is a no-op for actual citizens.
+**STATUS UPDATE 2026-05-17:** User feedback after first hands-on test of the V2 manager in `/admin/intake-lab`: conversation quality is **"not up to the mark"**. Wiring V2 into the live webhook is **paused** until we rethink the conversation design. Specific concerns we need to dig into next time we resume:
+- Tone / personality may still feel transactional despite the empathy rework
+- Follow-up question selection feels off (asks the wrong thing or skips important details)
+- Out-of-scope handling vs needs-review may need clearer thresholds
+- Possibly a model issue — try GPT-4o-mini or Claude 3.5 Sonnet via OpenRouter as A/B
+
+For the JTG soft-launch, **V1 (the rigid state machine) remains the production path.** No risk to soft-launch.
+
+**Why (original):** The toggle exists (`/admin/intake-settings`), the engine exists (`intakeConversationManager`), but the webhook doesn't read the setting yet.
 
 | ID    | Story                                                          | Status   | Estimate | Notes |
 |-------|----------------------------------------------------------------|----------|----------|-------|

@@ -114,6 +114,8 @@ export function TicketActionsPanel({
   workers,
 }: TicketActionsPanelProps) {
   const [noteContent, setNoteContent] = useState('')
+  const [noteImage, setNoteImage] = useState<File | null>(null)
+  const [noteImagePreview, setNoteImagePreview] = useState<string | null>(null)
   const [submittingNote, setSubmittingNote] = useState(false)
   const [noteType, setNoteType] = useState<'general' | 'worker_update' | 'escalation' | 'closure'>('general')
   const [noteIsInternal, setNoteIsInternal] = useState(true)
@@ -146,25 +148,56 @@ export function TicketActionsPanel({
     setSubmittingNote(true)
     setError(null)
     try {
-      const res = await fetch('/api/tickets/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket_id: ticket.id,
-          content: noteContent.trim(),
-          note_type: noteType,
-          is_internal: noteIsInternal,
-        }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed')
+      let res: Response
+      if (noteImage) {
+        // Use multipart/form-data so the image piggybacks on the same request.
+        const fd = new FormData()
+        fd.set('ticket_id', ticket.id)
+        fd.set('content', noteContent.trim())
+        fd.set('note_type', noteType)
+        fd.set('is_internal', String(noteIsInternal))
+        fd.set('image', noteImage)
+        res = await fetch('/api/tickets/notes', { method: 'POST', body: fd })
+      } else {
+        res = await fetch('/api/tickets/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticket_id: ticket.id,
+            content: noteContent.trim(),
+            note_type: noteType,
+            is_internal: noteIsInternal,
+          }),
+        })
+      }
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? 'Failed')
       setNoteContent('')
-      setSuccess('Note added')
+      clearNoteImage()
+      // If the image had an upload problem but the note saved, surface it.
+      if (body.attachment && body.attachment.ok === false) {
+        setSuccess(`Note added — but: ${body.attachment.error}`)
+      } else {
+        setSuccess(noteImage ? 'Note added with image' : 'Note added')
+      }
       refreshAfter('done')
     } catch (err: any) {
       setError(err.message)
     } finally {
       setSubmittingNote(false)
     }
+  }
+
+  function onPickNoteImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null
+    setNoteImage(f)
+    if (noteImagePreview) URL.revokeObjectURL(noteImagePreview)
+    setNoteImagePreview(f ? URL.createObjectURL(f) : null)
+  }
+  function clearNoteImage() {
+    if (noteImagePreview) URL.revokeObjectURL(noteImagePreview)
+    setNoteImage(null)
+    setNoteImagePreview(null)
   }
 
   async function handleAssign(e: React.FormEvent) {
@@ -490,12 +523,53 @@ export function TicketActionsPanel({
             <input type="checkbox" checked={noteIsInternal} onChange={e => setNoteIsInternal(e.target.checked)} />
             Internal only (hide from citizen)
           </label>
+
+          {/* Image attachment (optional) */}
+          <div className="space-y-1.5">
+            {!noteImage ? (
+              <label className="flex items-center gap-2 text-[11px] cursor-pointer px-3 py-2 rounded border border-dashed hover:bg-gray-50"
+                style={{ borderColor: 'var(--canvas-border)', color: 'var(--canvas-text-dim)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span>Attach photo (optional)</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif"
+                  className="hidden"
+                  onChange={onPickNoteImage}
+                />
+              </label>
+            ) : (
+              <div className="flex items-start gap-2 p-2 rounded border" style={{ borderColor: 'var(--canvas-border)' }}>
+                {noteImagePreview && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={noteImagePreview} alt="" className="w-16 h-16 object-cover rounded" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] truncate" style={{ color: 'var(--canvas-text)' }}>{noteImage.name}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--canvas-muted)' }}>
+                    {(noteImage.size / 1024).toFixed(0)} KB
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearNoteImage}
+                    className="text-[11px] mt-1 underline-offset-2 hover:underline"
+                    style={{ color: 'var(--alert-danger-text)' }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={!noteContent.trim() || submittingNote}
             className="w-full py-2 rounded-md text-sm font-medium disabled:opacity-50"
             style={{ background: 'var(--shell-bg)', color: '#fff' }}
-          >{submittingNote ? 'Adding…' : 'Add Note'}</button>
+          >{submittingNote ? 'Adding…' : (noteImage ? 'Add Note + Photo' : 'Add Note')}</button>
         </form>
       )}
 
