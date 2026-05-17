@@ -9,7 +9,9 @@
     "lint": "eslint",
     "seed:test-users": "tsx scripts/seed-test-users.ts",
     "seed:telangana-tier-a": "tsx scripts/seed-telangana-tier-a.ts",
-    "seed:gov-contacts": "tsx scripts/seed-gov-contacts.ts"
+    "seed:gov-contacts": "tsx scripts/seed-gov-contacts.ts",
+    "setup:storage-bucket": "tsx scripts/setup-storage-bucket.ts",
+    "backfill:telegram-attachments": "tsx scripts/backfill-telegram-attachments.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.0",

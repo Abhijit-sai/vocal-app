@@ -37,6 +37,7 @@ import { classifyIntent } from './aiService'
 import { createTicket } from './ticketService'
 import { generateTicketSuggestions } from './aiService'
 import { findNearestAvailableWorker, offerTicketToWorker } from './assignmentService'
+import { downloadFromTelegramAndStore } from './attachmentService'
 
 export type Step =
   | 'idle'
@@ -350,23 +351,40 @@ async function fileTicket(ctx: FlowContext) {
     })
     .eq('id', ctx.conversationId)
 
-  // Persist media as ticket_attachments (best-effort; don't block reply).
-  // NOTE: storage_path currently holds the Telegram file_id. A follow-up
-  // task will download from Telegram and upload to Supabase storage.
+  // Persist media as ticket_attachments. For each media entry we try to
+  // download from Telegram and upload to our Supabase Storage bucket
+  // (E1). If the download/upload fails, we still record the row with the
+  // legacy `telegram:<file_id>` pointer so the audit trail isn't lost —
+  // the backfill script will retry later.
+  //
+  // Fire-and-forget at the conversation level: we don't block the
+  // citizen confirmation reply waiting for media uploads.
   if (draft.media?.length) {
-    ctx.supabase.from('ticket_attachments').insert(
-      draft.media.map(m => ({
-        ticket_id: result.ticketId,
-        file_name: m.file_id,
-        storage_path: `telegram:${m.file_id}`,
-        mime_type: m.mime_type ?? null,
-        attachment_type:
-          m.type === 'voice' ? 'audio' :
-          m.type === 'image' ? 'image' :
-          m.type === 'video' ? 'video' :
-          m.type === 'document' ? 'document' : 'other',
-      }))
-    ).then(() => {}, () => {})
+    Promise.all(
+      draft.media.map(async m => {
+        const stored = await downloadFromTelegramAndStore({
+          file_id: m.file_id,
+          org_id: ctx.organizationId,
+          ticket_id: result.ticketId,
+          mime_hint: m.mime_type ?? null,
+        })
+        return {
+          ticket_id: result.ticketId,
+          file_name: m.file_id,
+          storage_path: stored?.storage_path ?? `telegram:${m.file_id}`,
+          mime_type: stored?.mime_type ?? m.mime_type ?? null,
+          file_size_bytes: stored?.size_bytes ?? null,
+          attachment_type:
+            stored?.attachment_type ??
+            (m.type === 'voice' ? 'audio' :
+             m.type === 'image' ? 'image' :
+             m.type === 'video' ? 'video' :
+             m.type === 'document' ? 'document' : 'other'),
+        }
+      }),
+    )
+      .then(rows => ctx.supabase.from('ticket_attachments').insert(rows))
+      .then(() => {}, () => {})
   }
 
   // Confirm to citizen.

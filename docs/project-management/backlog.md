@@ -39,11 +39,11 @@ E12. Configurable SLAs (NEW)         Backlog    High        ~3-5 days
 
 | ID    | Story                                                          | Status   | Estimate | Notes |
 |-------|----------------------------------------------------------------|----------|----------|-------|
-| E1-S1 | Provision Supabase Storage bucket + RLS policies               | Todo     | 1        | Bucket name `ticket-attachments`. Service-role write, signed-URL read with scope checks. |
-| E1-S2 | Telegram → Supabase storage download/upload pipeline           | Todo     | 3        | Service function: takes `file_id`, downloads via Bot API, uploads to bucket, returns canonical path. |
-| E1-S3 | Persist canonical path + metadata in `ticket_attachments`      | Todo     | 1        | Replace `telegram:<file_id>` pointers on insert. Keep file_id in `metadata_json` for audit. |
-| E1-S4 | Inline image preview in ticket detail page                     | Todo     | 2        | Renders thumbnails. Privileged roles always; ground_worker only after `citizen_identity_revealed_at`. |
-| E1-S5 | Backfill existing `telegram:` pointers (background job)        | Todo     | 2        | One-time script that resolves and uploads stale pointers. Idempotent. |
+| E1-S1 | Provision Supabase Storage bucket + RLS policies               | Done     | 1        | `scripts/setup-storage-bucket.ts`. Bucket `ticket-attachments` (private), 25 MB max, MIME allowlist. `npm run setup:storage-bucket`. User to execute against Supabase. |
+| E1-S2 | Telegram → Supabase storage download/upload pipeline           | Done     | 3        | `services/attachmentService.ts`. `downloadFromTelegramAndStore()` + `signedUrlFor()` + `signedUrlsFor()`. Fail-soft. |
+| E1-S3 | Persist canonical path + metadata in `ticket_attachments`      | Done     | 1        | `services/telegramFlow.ts` now calls the pipeline before inserting. Legacy `telegram:<file_id>` falls back if upload fails. |
+| E1-S4 | Inline image preview in ticket detail page                     | Done     | 2        | New Attachments section. Thumbnails for images; download links for others. Visibility-gated: privileged always; ground_worker only after `citizen_identity_revealed_at`. |
+| E1-S5 | Backfill existing `telegram:` pointers (background job)        | Done     | 2        | `scripts/backfill-telegram-attachments.ts`. Idempotent. `npm run backfill:telegram-attachments`. User to run when ready. |
 | E1-S6 | Retention policy + cleanup cron                                | Backlog  | 2        | Default 24 months, configurable per org. Defer until post-launch if tight. |
 
 ---

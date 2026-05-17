@@ -49,6 +49,7 @@ export default async function TicketDetailPage({
     { data: aiSuggestion },
     { data: assignment },
     { data: citizenIdentity },
+    { data: attachmentsRaw },
   ] = await Promise.all([
     supabase.from('ticket_notes')
       .select('*, users(id, full_name)')
@@ -76,7 +77,27 @@ export default async function TicketDetailPage({
           .order('last_seen_at', { ascending: false })
           .limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.from('ticket_attachments')
+      .select('id, file_name, storage_path, mime_type, file_size_bytes, attachment_type, created_at')
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: true }),
   ])
+
+  // Visibility gate for attachments: privileged roles always; ground_worker
+  // only after `citizen_identity_revealed_at` (same gate as citizen phone).
+  // Other roles (state_leader / district_leader) see metadata only.
+  const canSeeAttachmentMedia =
+    isPrivileged ||
+    (roleName === 'ground_worker' && !!(ticket as any).citizen_identity_revealed_at)
+
+  // Generate signed URLs only for attachments the caller can actually view,
+  // and only for entries with a real storage path (skip legacy
+  // `telegram:<file_id>` pointers — they have no fetchable URL yet).
+  const { signedUrlsFor } = await import('@/services/attachmentService')
+  const attachments = attachmentsRaw ?? []
+  const attachmentUrlMap = canSeeAttachmentMedia
+    ? await signedUrlsFor(attachments.map(a => a.storage_path))
+    : {}
 
   // Workers only see citizen contact after identity is revealed; privileged users see always.
   const canSeeCitizenContact =
@@ -266,6 +287,78 @@ export default async function TicketDetailPage({
               </section>
             )}
 
+            {/* ============ Attachments ============ */}
+            {attachments.length > 0 && (
+              <section className="card p-5">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-3"
+                    style={{ color: 'var(--canvas-muted)' }}>
+                  Attachments ({attachments.length})
+                </h2>
+
+                {/* Visibility gate for ground_worker pre-accept */}
+                {!canSeeAttachmentMedia && roleName === 'ground_worker' && (
+                  <p className="text-xs mb-3" style={{ color: 'var(--canvas-muted)' }}>
+                    📎 Accept the ticket to view the citizen's attachments.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {attachments.map(att => {
+                    const url = attachmentUrlMap[att.storage_path]
+                    const isImage = att.attachment_type === 'image' && url
+                    const isLegacy = att.storage_path.startsWith('telegram:')
+                    return (
+                      <div key={att.id}
+                        className="rounded-md overflow-hidden border"
+                        style={{ borderColor: 'var(--canvas-border)', background: 'var(--canvas-surface-alt)' }}>
+                        {isImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <a href={url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={url}
+                              alt={`Attachment ${att.file_name ?? ''}`}
+                              loading="lazy"
+                              className="w-full h-32 object-cover hover:opacity-90 transition-opacity"
+                            />
+                          </a>
+                        ) : (
+                          <div className="h-32 flex items-center justify-center text-xs px-3 text-center"
+                            style={{ color: 'var(--canvas-muted)' }}>
+                            {isLegacy
+                              ? <span>📦 Pending upload<br/><span className="text-[10px]">(legacy pointer)</span></span>
+                              : !canSeeAttachmentMedia
+                                ? <span>🔒 Hidden until accepted</span>
+                                : !url
+                                  ? <span>⚠ Unavailable</span>
+                                  : <span>📄 {att.attachment_type}</span>}
+                          </div>
+                        )}
+                        <div className="p-2 text-[11px]" style={{ borderTop: '1px solid var(--canvas-border)' }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="capitalize" style={{ color: 'var(--canvas-text-dim)' }}>
+                              {att.attachment_type}
+                            </span>
+                            {att.file_size_bytes && (
+                              <span style={{ color: 'var(--canvas-muted)' }}>
+                                {formatBytes(att.file_size_bytes)}
+                              </span>
+                            )}
+                          </div>
+                          {url && !isImage && (
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                              className="block mt-1 underline-offset-2 hover:underline"
+                              style={{ color: 'var(--primary)' }}>
+                              Download
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
             {/* Classification grid */}
             <section className="card p-5">
               <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-3"
@@ -411,6 +504,12 @@ function LocationValue({ text, lat, lng }: { text: string | null | undefined; la
       {label}
     </a>
   )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 function MetaRow({ label, value, className = '' }: { label: string; value?: React.ReactNode; className?: string }) {
