@@ -373,17 +373,26 @@ async function fileTicket(ctx: FlowContext) {
   // doesn't care about within its 60s window) and the auto-assign
   // kick-off below. Both fine.
   if (draft.media?.length) {
-    const t0 = Date.now()
-    console.error(`[telegramFlow] uploading ${draft.media.length} media file(s) for ticket ${result.ticketNumber}`)
+    const tStart = Date.now()
+    console.error(`[telegramFlow] ENTER media upload block: ${draft.media.length} file(s) for ticket ${result.ticketNumber}`)
     try {
       const rows = await Promise.all(
-        draft.media.map(async m => {
-          const stored = await downloadFromTelegramAndStore({
-            file_id: m.file_id,
-            org_id: ctx.organizationId,
-            ticket_id: result.ticketId,
-            mime_hint: m.mime_type ?? null,
-          })
+        draft.media.map(async (m, idx) => {
+          const t0 = Date.now()
+          console.error(`[telegramFlow] file[${idx}] START download: file_id=${m.file_id.slice(0, 24)}… type=${m.type} mime_hint=${m.mime_type ?? 'null'}`)
+          let stored
+          try {
+            stored = await downloadFromTelegramAndStore({
+              file_id: m.file_id,
+              org_id: ctx.organizationId,
+              ticket_id: result.ticketId,
+              mime_hint: m.mime_type ?? null,
+            })
+          } catch (err) {
+            console.error(`[telegramFlow] file[${idx}] downloadFromTelegramAndStore THREW after ${Date.now() - t0}ms:`, err instanceof Error ? err.message : String(err))
+            stored = null
+          }
+          console.error(`[telegramFlow] file[${idx}] download result in ${Date.now() - t0}ms: ${stored ? 'OK path=' + stored.storage_path : 'NULL (falling back to telegram: pointer)'}`)
           return {
             ticket_id: result.ticketId,
             file_name: m.file_id,
@@ -403,11 +412,12 @@ async function fileTicket(ctx: FlowContext) {
       const okCount = rows.filter(r => r._ok).length
       const dbRows = rows.map(({ _ok: _, ...rest }) => rest)
       const { error: insErr } = await ctx.supabase.from('ticket_attachments').insert(dbRows)
-      console.error(`[telegramFlow] media upload done in ${Date.now() - t0}ms: ${okCount}/${rows.length} stored to bucket${insErr ? ` (db insert error: ${insErr.message})` : ''}`)
+      console.error(`[telegramFlow] EXIT media upload block in ${Date.now() - tStart}ms total: ${okCount}/${rows.length} stored to bucket${insErr ? ` (db insert error: ${insErr.message})` : ''}`)
     } catch (err) {
-      // Belt-and-braces: never block downstream actions on attachment failure.
-      console.error('[telegramFlow] media upload threw — continuing without attachments', err)
+      console.error('[telegramFlow] media upload OUTER THREW — continuing without attachments:', err instanceof Error ? err.message : String(err))
     }
+  } else {
+    console.error(`[telegramFlow] no media on draft for ticket ${result.ticketNumber}`)
   }
 
   // Auto-assign: fire-and-forget; skips triage queue.
