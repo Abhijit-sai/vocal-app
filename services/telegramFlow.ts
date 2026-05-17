@@ -351,44 +351,64 @@ async function fileTicket(ctx: FlowContext) {
     })
     .eq('id', ctx.conversationId)
 
+  // Confirm to citizen FIRST so the reply is snappy — the slow media
+  // upload happens immediately below but the citizen has already seen
+  // confirmation.
+  await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber), { reply_markup: KB.postTicket() })
+
   // Persist media as ticket_attachments. For each media entry we try to
   // download from Telegram and upload to our Supabase Storage bucket
   // (E1). If the download/upload fails, we still record the row with the
-  // legacy `telegram:<file_id>` pointer so the audit trail isn't lost —
-  // the backfill script will retry later.
+  // legacy `telegram:<file_id>` pointer so the audit trail isn't lost.
   //
-  // Fire-and-forget at the conversation level: we don't block the
-  // citizen confirmation reply waiting for media uploads.
+  // CRITICAL: this MUST be awaited — not fire-and-forget. Vercel
+  // serverless will terminate any in-flight promise the moment the
+  // parent function returns. Pre-2026-05-17 this was fire-and-forget
+  // and the function returned before Telegram's getFile/download
+  // round-trip (typically 2-5s) finished, so every upload fell
+  // through silently to the telegram:<file_id> fallback.
+  //
+  // The citizen reply already went out above; this await only
+  // delays the webhook's final 200 OK to Telegram (which Telegram
+  // doesn't care about within its 60s window) and the auto-assign
+  // kick-off below. Both fine.
   if (draft.media?.length) {
-    Promise.all(
-      draft.media.map(async m => {
-        const stored = await downloadFromTelegramAndStore({
-          file_id: m.file_id,
-          org_id: ctx.organizationId,
-          ticket_id: result.ticketId,
-          mime_hint: m.mime_type ?? null,
-        })
-        return {
-          ticket_id: result.ticketId,
-          file_name: m.file_id,
-          storage_path: stored?.storage_path ?? `telegram:${m.file_id}`,
-          mime_type: stored?.mime_type ?? m.mime_type ?? null,
-          file_size_bytes: stored?.size_bytes ?? null,
-          attachment_type:
-            stored?.attachment_type ??
-            (m.type === 'voice' ? 'audio' :
-             m.type === 'image' ? 'image' :
-             m.type === 'video' ? 'video' :
-             m.type === 'document' ? 'document' : 'other'),
-        }
-      }),
-    )
-      .then(rows => ctx.supabase.from('ticket_attachments').insert(rows))
-      .then(() => {}, () => {})
+    const t0 = Date.now()
+    console.error(`[telegramFlow] uploading ${draft.media.length} media file(s) for ticket ${result.ticketNumber}`)
+    try {
+      const rows = await Promise.all(
+        draft.media.map(async m => {
+          const stored = await downloadFromTelegramAndStore({
+            file_id: m.file_id,
+            org_id: ctx.organizationId,
+            ticket_id: result.ticketId,
+            mime_hint: m.mime_type ?? null,
+          })
+          return {
+            ticket_id: result.ticketId,
+            file_name: m.file_id,
+            storage_path: stored?.storage_path ?? `telegram:${m.file_id}`,
+            mime_type: stored?.mime_type ?? m.mime_type ?? null,
+            file_size_bytes: stored?.size_bytes ?? null,
+            attachment_type:
+              stored?.attachment_type ??
+              (m.type === 'voice' ? 'audio' :
+               m.type === 'image' ? 'image' :
+               m.type === 'video' ? 'video' :
+               m.type === 'document' ? 'document' : 'other'),
+            _ok: !!stored,
+          }
+        }),
+      )
+      const okCount = rows.filter(r => r._ok).length
+      const dbRows = rows.map(({ _ok: _, ...rest }) => rest)
+      const { error: insErr } = await ctx.supabase.from('ticket_attachments').insert(dbRows)
+      console.error(`[telegramFlow] media upload done in ${Date.now() - t0}ms: ${okCount}/${rows.length} stored to bucket${insErr ? ` (db insert error: ${insErr.message})` : ''}`)
+    } catch (err) {
+      // Belt-and-braces: never block downstream actions on attachment failure.
+      console.error('[telegramFlow] media upload threw — continuing without attachments', err)
+    }
   }
-
-  // Confirm to citizen.
-  await sendTelegramMessage(ctx.msg.chat_id, BOT.filed(result.ticketNumber), { reply_markup: KB.postTicket() })
 
   // Auto-assign: fire-and-forget; skips triage queue.
   findNearestAvailableWorker(result.ticketId).then(async (worker) => {
