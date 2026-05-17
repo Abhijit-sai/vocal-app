@@ -75,7 +75,16 @@ function pickMedia(msg: TelegramMessage): IncomingMessage['media'] {
   }
   if (msg.photo && msg.photo.length) {
     // Use the largest photo size (last element).
-    return { file_id: msg.photo[msg.photo.length - 1].file_id, type: 'image', caption: msg.caption ?? null }
+    // Telegram's photo struct has no mime_type field on the message — but
+    // Telegram converts every uploaded photo to JPEG server-side, so we
+    // can safely hint that. Without this hint the Storage bucket rejects
+    // the upload with 'mime type application/octet-stream not supported'.
+    return {
+      file_id: msg.photo[msg.photo.length - 1].file_id,
+      type: 'image',
+      mime_type: 'image/jpeg',
+      caption: msg.caption ?? null,
+    }
   }
   if (msg.video) {
     return { file_id: msg.video.file_id, type: 'video', mime_type: msg.video.mime_type ?? null, caption: msg.caption ?? null }

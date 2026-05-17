@@ -80,6 +80,52 @@ function extFromMime(mime: string | null | undefined): string {
   return map[mime] ?? mime.split('/')[1]?.replace(/[^a-z0-9]/gi, '').slice(0, 6) ?? 'bin'
 }
 
+/**
+ * Best-effort MIME inference when Telegram + the message struct don't
+ * give us a usable one. Order of preference:
+ *   1. The mime_hint we were given (from the caller — most reliable).
+ *   2. The file extension Telegram returned on `file_path` (e.g. `.jpg`).
+ *   3. Magic-bytes sniff on the first ~12 downloaded bytes.
+ *   4. Give up — caller decides what to do (we never return octet-stream
+ *      because the bucket allowlist rejects it).
+ */
+function inferMime(args: {
+  hint: string | null | undefined
+  telegramFilePath: string | null | undefined
+  bytes: Buffer
+}): string | null {
+  // 1. Trust the hint if it's a real MIME (not the generic fallback).
+  if (args.hint && args.hint !== 'application/octet-stream' && args.hint.includes('/')) {
+    return args.hint
+  }
+  // 2. File extension from Telegram's `file_path`.
+  if (args.telegramFilePath) {
+    const ext = args.telegramFilePath.split('.').pop()?.toLowerCase() ?? ''
+    const fromExt: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      heic: 'image/heic', heif: 'image/heif',
+      gif: 'image/gif',
+      mp4: 'video/mp4', mov: 'video/quicktime',
+      ogg: 'audio/ogg', oga: 'audio/ogg',
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      pdf: 'application/pdf',
+    }
+    if (fromExt[ext]) return fromExt[ext]
+  }
+  // 3. Magic-bytes sniff.
+  const b = args.bytes
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)               return 'image/jpeg'
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+  if (b.length >= 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  if (b.length >= 6 && b.toString('ascii', 0, 6) === 'GIF87a')                         return 'image/gif'
+  if (b.length >= 6 && b.toString('ascii', 0, 6) === 'GIF89a')                         return 'image/gif'
+  if (b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf'
+  return null
+}
+
 function buildPath(args: { org_id: string; ticket_id: string; mime: string | null | undefined }): string {
   const uuid = crypto.randomUUID()
   return `org/${args.org_id}/ticket/${args.ticket_id}/${uuid}.${extFromMime(args.mime)}`
@@ -154,7 +200,28 @@ export async function downloadFromTelegramAndStore(args: {
       return null
     }
     const buffer = Buffer.from(await fileResp.arrayBuffer())
-    const mime = args.mime_hint ?? fileResp.headers.get('content-type') ?? 'application/octet-stream'
+    const headerCt = fileResp.headers.get('content-type')
+
+    // Resolve a MIME that the bucket will actually accept. Telegram's CDN
+    // often returns 'application/octet-stream' for photos, and the message
+    // struct for `photo` type has no mime_type field — so the hint can
+    // also be null. inferMime walks: hint → Telegram file_path extension
+    // → magic-bytes sniff.
+    const resolved = inferMime({
+      hint: args.mime_hint ?? (headerCt && headerCt !== 'application/octet-stream' ? headerCt : null),
+      telegramFilePath: filePath,
+      bytes: buffer,
+    })
+    if (!resolved) {
+      log('FAIL: could not infer MIME', {
+        hint: args.mime_hint,
+        header_content_type: headerCt,
+        telegram_file_path: filePath,
+        first_bytes_hex: buffer.subarray(0, 8).toString('hex'),
+      })
+      return null
+    }
+    const mime = resolved
 
     // 3. Upload to Supabase Storage.
     const supabase = createSupabaseServiceClient()
